@@ -2448,34 +2448,6 @@ void Tracking::Track()
             //}
         }
 
-        // Save frame if recent relocalization, since they are used for IMU reset (as we are making copy, it shluld be once mCurrFrame is completely modified)
-        // 这段貌似没啥作用
-        if((mCurrentFrame.mnId<(mnLastRelocFrameId+mnFramesToResetIMU)) && (mCurrentFrame.mnId > mnFramesToResetIMU) &&
-           (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD) && pCurrentMap->isImuInitialized())
-        {
-            // TODO check this situation
-            Verbose::PrintMess("Saving pointer to frame. imu needs reset...", Verbose::VERBOSITY_NORMAL);
-            Frame* pF = new Frame(mCurrentFrame);
-            pF->mpPrevFrame = new Frame(mLastFrame);
-
-            // Load preintegration
-            pF->mpImuPreintegratedFrame = new IMU::Preintegrated(mCurrentFrame.mpImuPreintegratedFrame);
-        }
-        // 下面代码没有用
-        if(pCurrentMap->isImuInitialized())
-        {
-            if(bOK)
-            {
-                // 当前帧距离上次重定位帧刚好等于1s，重置（还未实现 TODO）
-                if(mCurrentFrame.mnId==(mnLastRelocFrameId+mnFramesToResetIMU))
-                {
-                    cout << "RESETING FRAME!!!" << endl;
-                    ResetFrameIMU();
-                }
-                else if(mCurrentFrame.mnId>(mnLastRelocFrameId+30))
-                    mLastBias = mCurrentFrame.mImuBias;  // 没啥用，后面会重新赋值后传给普通帧
-            }
-        }
 
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_EndLMTrack = std::chrono::steady_clock::now();
