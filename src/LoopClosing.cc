@@ -47,7 +47,6 @@ LoopClosing::LoopClosing(Atlas *pAtlas, KeyFrameDatabase *pDB, ORBVocabulary *pV
 {
     // 连续性阈值
     mnCovisibilityConsistencyTh = 3;
-    mpLastCurrentKF = static_cast<KeyFrame*>(NULL);
 
 #ifdef REGISTER_TIMES
 
@@ -111,241 +110,293 @@ void LoopClosing::Run()
         // Loopclosing中的关键帧是LocalMapping发送过来的，LocalMapping是Tracking中发过来的
         // 在LocalMapping中通过 InsertKeyFrame 将关键帧插入闭环检测队列mlpLoopKeyFrameQueue
         // Step 1 查看闭环检测队列mlpLoopKeyFrameQueue中有没有关键帧进来
-        if(CheckNewKeyFrames())
+        if (!CheckNewKeyFrames())
         {
-            // 这部分后续未使用
-            if(mpLastCurrentKF)
+            // 查看是否有外部线程请求复位当前线程
+            ResetIfRequested();
+
+            // 查看外部线程是否有终止当前线程的请求,如果有的话就跳出这个线程的主函数的主循环
+            if (CheckFinish())
             {
-                mpLastCurrentKF->mvpLoopCandKFs.clear();
-                mpLastCurrentKF->mvpMergeCandKFs.clear();
+                break;
             }
-#ifdef REGISTER_TIMES
-            std::chrono::steady_clock::time_point time_StartPR = std::chrono::steady_clock::now();
-#endif
-            // Step 2 检测有没有共视的区域
-            bool bFindedRegion = NewDetectCommonRegions();
+            continue;
+        }
 
 #ifdef REGISTER_TIMES
-            std::chrono::steady_clock::time_point time_EndPR = std::chrono::steady_clock::now();
-
-            double timePRTotal = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndPR - time_StartPR).count();
-            vdPRTotal_ms.push_back(timePRTotal);
+        std::chrono::steady_clock::time_point time_StartPR = std::chrono::steady_clock::now();
 #endif
-            if(bFindedRegion)
+        // Step 2 检测有没有共视的区域
+        bool bFindedRegion = NewDetectCommonRegions();
+
+#ifdef REGISTER_TIMES
+        std::chrono::steady_clock::time_point time_EndPR = std::chrono::steady_clock::now();
+
+        double timePRTotal =
+            std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(time_EndPR - time_StartPR).count();
+        vdPRTotal_ms.push_back(timePRTotal);
+#endif
+        if (!bFindedRegion)
+        {
+            // 查看是否有外部线程请求复位当前线程
+            ResetIfRequested();
+
+            // 查看外部线程是否有终止当前线程的请求,如果有的话就跳出这个线程的主函数的主循环
+            if (CheckFinish())
             {
-                // Step 3 如果检测到融合（当前关键帧与其他地图有关联）, 则合并地图
-                if(mbMergeDetected)
+                break;
+            }
+
+            usleep(5000);
+            continue;
+        }
+
+        // Step 3 如果检测到融合（当前关键帧与其他地图有关联）, 则合并地图
+        if (mbMergeDetected)
+        {
+            // 在imu没有初始化就放弃融合
+            if ((mpTracker->mSensor == System::IMU_MONOCULAR || mpTracker->mSensor == System::IMU_STEREO ||
+                 mpTracker->mSensor == System::IMU_RGBD) &&
+                (!mpCurrentKF->GetMap()->isImuInitialized()))
+            {
+                cout << "IMU is not initilized, merge is aborted" << endl;
+
+                // 记录时间戳
+                vdPR_CurrentTime.push_back(mpCurrentKF->mTimeStamp);
+                vdPR_MatchedTime.push_back(mpMergeMatchedKF->mTimeStamp);
+                // 标记Place recognition结果为地图融合
+                vnPR_TypeRecogn.push_back(1);
+
+                // Reset all variables
+                // 重置所有融合相关变量
+                mpMergeLastCurrentKF->SetErase();
+                mpMergeMatchedKF->SetErase();
+                mnMergeNumCoincidences = 0;
+                mvpMergeMatchedMPs.clear();
+                mvpMergeMPs.clear();
+                mnMergeNumNotFound = 0;
+                mbMergeDetected    = false;
+
+                // 重置所有回环相关变量, 说明对与当前帧同时有回环和融合的情况只进行融合
+                if (mbLoopDetected)
                 {
-                    // 在imu没有初始化就放弃融合
-                    if ((mpTracker->mSensor==System::IMU_MONOCULAR || mpTracker->mSensor==System::IMU_STEREO || mpTracker->mSensor==System::IMU_RGBD) &&
-                        (!mpCurrentKF->GetMap()->isImuInitialized()))
-                    {
-                        cout << "IMU is not initilized, merge is aborted" << endl;
-                    }
-                    else
-                    {
-                        // 拿到融合帧在自己地图所在坐标系(w2)下的位姿
-                        Sophus::SE3d mTmw = mpMergeMatchedKF->GetPose().cast<double>();
-                        g2o::Sim3 gSmw2(mTmw.unit_quaternion(), mTmw.translation(), 1.0);
-                        // 拿到当前帧在自己地图所在坐标系(w1)下的位姿
-                        Sophus::SE3d mTcw = mpCurrentKF->GetPose().cast<double>();
-                        g2o::Sim3 gScw1(mTcw.unit_quaternion(), mTcw.translation(), 1.0);
-                        // 根据共同区域检测时的Sim3结果得到当前帧在w2下的位姿
-                        // mg2oMergeSlw 里存放的是融合候选关键帧所在的世界坐标系w2到当前帧的Sim3位姿
-                        // l = c , w2是融合候选关键帧所在的世界坐标系
-                        g2o::Sim3 gSw2c = mg2oMergeSlw.inverse();
-                        // 这个没有用到 : 融合帧在w1下的位姿
-                        g2o::Sim3 gSw1m = mg2oMergeSlw;
-
-                        // 记录焊接变换(Sim3) T_w2_w1 , 这个量实际是两个地图坐标系的关系 T_w2_w1 = T_w2_c * T_c_w1
-                        mSold_new = (gSw2c * gScw1);
-
-                        // 如果是imu模式
-                        if(mpCurrentKF->GetMap()->IsInertial() && mpMergeMatchedKF->GetMap()->IsInertial())
-                        {
-                            cout << "Merge check transformation with IMU" << endl;
-                            // 如果尺度变换太大, 认为累积误差较大，则放弃融合
-                            if(mSold_new.scale()<0.90||mSold_new.scale()>1.1){
-                                mpMergeLastCurrentKF->SetErase();
-                                mpMergeMatchedKF->SetErase();
-                                mnMergeNumCoincidences = 0;
-                                mvpMergeMatchedMPs.clear();
-                                mvpMergeMPs.clear();
-                                mnMergeNumNotFound = 0;
-                                mbMergeDetected = false;
-                                Verbose::PrintMess("scale bad estimated. Abort merging", Verbose::VERBOSITY_NORMAL);
-                                continue;
-                            }
-                            // If inertial, force only yaw
-                            // 如果是imu模式并且完成了初始化,强制将焊接变换的 roll 和 pitch 设为0
-                            // 通过物理约束来保证两个坐标轴都是水平的
-                            if ((mpTracker->mSensor==System::IMU_MONOCULAR || mpTracker->mSensor==System::IMU_STEREO || mpTracker->mSensor==System::IMU_RGBD) &&
-                                   mpCurrentKF->GetMap()->GetIniertialBA1())
-                            {
-                                Eigen::Vector3d phi = LogSO3(mSold_new.rotation().toRotationMatrix());
-                                phi(0)=0;
-                                phi(1)=0;
-                                mSold_new = g2o::Sim3(ExpSO3(phi),mSold_new.translation(),1.0);
-                            }
-                        }
-
-                        // 这个变量没有用到
-                        mg2oMergeSmw = gSmw2 * gSw2c * gScw1;
-
-                        // 更新mg2oMergeScw
-                        mg2oMergeScw = mg2oMergeSlw;
-
-                        //mpTracker->SetStepByStep(true);
-
-                        Verbose::PrintMess("*Merge detected", Verbose::VERBOSITY_QUIET);
-
-#ifdef REGISTER_TIMES
-                        std::chrono::steady_clock::time_point time_StartMerge = std::chrono::steady_clock::now();
-
-                        nMerges += 1;
-#endif
-                        // TODO UNCOMMENT
-                        // 如果是imu模式,则开启 Visual-Inertial Map Merging
-                        // 如果是纯视觉模式,则开启 Visual-Welding Map Merging
-                        if (mpTracker->mSensor==System::IMU_MONOCULAR ||mpTracker->mSensor==System::IMU_STEREO || mpTracker->mSensor==System::IMU_RGBD)
-                            MergeLocal2();
-                        else
-                            MergeLocal();
-
-#ifdef REGISTER_TIMES
-                        std::chrono::steady_clock::time_point time_EndMerge = std::chrono::steady_clock::now();
-
-                        double timeMergeTotal = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndMerge - time_StartMerge).count();
-                        vdMergeTotal_ms.push_back(timeMergeTotal);
-#endif
-
-                        Verbose::PrintMess("Merge finished!", Verbose::VERBOSITY_QUIET);
-                    }
-                    // 记录时间戳
-                    vdPR_CurrentTime.push_back(mpCurrentKF->mTimeStamp);
-                    vdPR_MatchedTime.push_back(mpMergeMatchedKF->mTimeStamp);
-                    // 标记Place recognition结果为地图融合
-                    vnPR_TypeRecogn.push_back(1);
-
-                    // Reset all variables
-                    // 重置所有融合相关变量
-                    mpMergeLastCurrentKF->SetErase();
-                    mpMergeMatchedKF->SetErase();
-                    mnMergeNumCoincidences = 0;
-                    mvpMergeMatchedMPs.clear();
-                    mvpMergeMPs.clear();
-                    mnMergeNumNotFound = 0;
-                    mbMergeDetected = false;
-
-                    // 重置所有回环相关变量, 说明对与当前帧同时有回环和融合的情况只进行融合
-                    if(mbLoopDetected)
-                    {
-                        // Reset Loop variables
-                        mpLoopLastCurrentKF->SetErase();
-                        mpLoopMatchedKF->SetErase();
-                        mnLoopNumCoincidences = 0;
-                        mvpLoopMatchedMPs.clear();
-                        mvpLoopMPs.clear();
-                        mnLoopNumNotFound = 0;
-                        mbLoopDetected = false;
-                    }
-
-                }
-
-                // Step 4 如果(没有检测到融合)检测到回环, 则回环矫正
-                if(mbLoopDetected)
-                {
-                    // 标记时间戳
-                    bool bGoodLoop = true;
-                    vdPR_CurrentTime.push_back(mpCurrentKF->mTimeStamp);
-                    vdPR_MatchedTime.push_back(mpLoopMatchedKF->mTimeStamp);
-                    vnPR_TypeRecogn.push_back(0);
-
-                    Verbose::PrintMess("*Loop detected", Verbose::VERBOSITY_QUIET);
-                    // 更新 mg2oLoopScw
-                    mg2oLoopScw = mg2oLoopSlw; //*mvg2oSim3LoopTcw[nCurrentIndex];
-                    // 如果是带imu的模式则做下判断，纯视觉跳过
-                    if(mpCurrentKF->GetMap()->IsInertial())
-                    {
-                        // 拿到当前关键帧相对于世界坐标系的位姿
-                        Sophus::SE3d Twc = mpCurrentKF->GetPoseInverse().cast<double>();
-                        g2o::Sim3 g2oTwc(Twc.unit_quaternion(),Twc.translation(),1.0);
-
-                        // mg2oLoopScw是通过回环检测的Sim3计算出的回环矫正后的当前关键帧的初始位姿, Twc是当前关键帧回环矫正前的位姿.
-                        // g2oSww_new 可以理解为correction
-                        g2o::Sim3 g2oSww_new = g2oTwc*mg2oLoopScw;
-
-                        // 拿到 roll ,pitch ,yaw
-                        Eigen::Vector3d phi = LogSO3(g2oSww_new.rotation().toRotationMatrix());
-                        cout << "phi = " << phi.transpose() << endl; 
-                        // 这里算是通过imu重力方向验证回环结果, 如果pitch或roll角度偏差稍微有一点大,则回环失败. 对yaw容忍比较大(20度)
-                        if (fabs(phi(0))<0.008f && fabs(phi(1))<0.008f && fabs(phi(2))<0.349f)
-                        {
-                            // 如果是imu模式
-                            if(mpCurrentKF->GetMap()->IsInertial())
-                            {
-                                // If inertial, force only yaw
-                                // 如果是imu模式,强制将焊接变换的的 roll 和 pitch 设为0
-                                if ((mpTracker->mSensor==System::IMU_MONOCULAR ||mpTracker->mSensor==System::IMU_STEREO || mpTracker->mSensor==System::IMU_RGBD) &&
-                                        mpCurrentKF->GetMap()->GetIniertialBA2())
-                                {
-                                    phi(0)=0;
-                                    phi(1)=0;
-                                    g2oSww_new = g2o::Sim3(ExpSO3(phi),g2oSww_new.translation(),1.0);
-                                    mg2oLoopScw = g2oTwc.inverse()*g2oSww_new;
-                                }
-                            }
-
-                        }
-                        else
-                        {
-                            cout << "BAD LOOP!!!" << endl;
-                            bGoodLoop = false;
-                        }
-
-                    }
-
-                    if (bGoodLoop) {
-
-                        mvpLoopMapPoints = mvpLoopMPs;
-
-#ifdef REGISTER_TIMES
-                        std::chrono::steady_clock::time_point time_StartLoop = std::chrono::steady_clock::now();
-
-                        nLoop += 1;
-
-#endif
-                        // 开启回环矫正
-                        CorrectLoop();
-#ifdef REGISTER_TIMES
-                        std::chrono::steady_clock::time_point time_EndLoop = std::chrono::steady_clock::now();
-
-                        double timeLoopTotal = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndLoop - time_StartLoop).count();
-                        vdLoopTotal_ms.push_back(timeLoopTotal);
-#endif
-
-                        mnNumCorrection += 1;
-                    }
-
-                    // Reset all variables
-                    // 重置所有的回环变量
+                    // Reset Loop variables
                     mpLoopLastCurrentKF->SetErase();
                     mpLoopMatchedKF->SetErase();
                     mnLoopNumCoincidences = 0;
                     mvpLoopMatchedMPs.clear();
                     mvpLoopMPs.clear();
                     mnLoopNumNotFound = 0;
-                    mbLoopDetected = false;
+                    mbLoopDetected    = false;
                 }
 
+                continue;
             }
-            mpLastCurrentKF = mpCurrentKF;
+
+            // 拿到融合帧在自己地图所在坐标系(w2)下的位姿
+            Sophus::SE3d mTmw = mpMergeMatchedKF->GetPose().cast<double>();
+            g2o::Sim3    gSmw2(mTmw.unit_quaternion(), mTmw.translation(), 1.0);
+            // 拿到当前帧在自己地图所在坐标系(w1)下的位姿
+            Sophus::SE3d mTcw = mpCurrentKF->GetPose().cast<double>();
+            g2o::Sim3    gScw1(mTcw.unit_quaternion(), mTcw.translation(), 1.0);
+            // 根据共同区域检测时的Sim3结果得到当前帧在w2下的位姿
+            // mg2oMergeSlw 里存放的是融合候选关键帧所在的世界坐标系w2到当前帧的Sim3位姿
+            // l = c , w2是融合候选关键帧所在的世界坐标系
+            g2o::Sim3 gSw2c = mg2oMergeSlw.inverse();
+            // 这个没有用到 : 融合帧在w1下的位姿
+            g2o::Sim3 gSw1m = mg2oMergeSlw;
+
+            // 记录焊接变换(Sim3) T_w2_w1 , 这个量实际是两个地图坐标系的关系 T_w2_w1 = T_w2_c * T_c_w1
+            mSold_new = (gSw2c * gScw1);
+
+            // 如果是imu模式
+            if (mpCurrentKF->GetMap()->IsInertial() && mpMergeMatchedKF->GetMap()->IsInertial())
+            {
+                cout << "Merge check transformation with IMU" << endl;
+                // 如果尺度变换太大, 认为累积误差较大，则放弃融合
+                if (mSold_new.scale() < 0.90 || mSold_new.scale() > 1.1)
+                {
+                    mpMergeLastCurrentKF->SetErase();
+                    mpMergeMatchedKF->SetErase();
+                    mnMergeNumCoincidences = 0;
+                    mvpMergeMatchedMPs.clear();
+                    mvpMergeMPs.clear();
+                    mnMergeNumNotFound = 0;
+                    mbMergeDetected    = false;
+                    Verbose::PrintMess("scale bad estimated. Abort merging", Verbose::VERBOSITY_NORMAL);
+                    continue;
+                }
+                // If inertial, force only yaw
+                // 如果是imu模式并且完成了初始化,强制将焊接变换的 roll 和 pitch 设为0
+                // 通过物理约束来保证两个坐标轴都是水平的
+                if ((mpTracker->mSensor == System::IMU_MONOCULAR || mpTracker->mSensor == System::IMU_STEREO ||
+                     mpTracker->mSensor == System::IMU_RGBD) &&
+                    mpCurrentKF->GetMap()->GetIniertialBA1())
+                {
+                    Eigen::Vector3d phi = LogSO3(mSold_new.rotation().toRotationMatrix());
+                    phi(0)              = 0;
+                    phi(1)              = 0;
+                    mSold_new           = g2o::Sim3(ExpSO3(phi), mSold_new.translation(), 1.0);
+                }
+            }
+
+            // 这个变量没有用到
+            mg2oMergeSmw = gSmw2 * gSw2c * gScw1;
+
+            // 更新mg2oMergeScw
+            mg2oMergeScw = mg2oMergeSlw;
+
+            // mpTracker->SetStepByStep(true);
+
+            Verbose::PrintMess("*Merge detected", Verbose::VERBOSITY_QUIET);
+
+#ifdef REGISTER_TIMES
+            std::chrono::steady_clock::time_point time_StartMerge = std::chrono::steady_clock::now();
+
+            nMerges += 1;
+#endif
+            // TODO UNCOMMENT
+            // 如果是imu模式,则开启 Visual-Inertial Map Merging
+            // 如果是纯视觉模式,则开启 Visual-Welding Map Merging
+            if (mpTracker->mSensor == System::IMU_MONOCULAR || mpTracker->mSensor == System::IMU_STEREO ||
+                mpTracker->mSensor == System::IMU_RGBD)
+                MergeLocal2();
+            else
+                MergeLocal();
+
+#ifdef REGISTER_TIMES
+            std::chrono::steady_clock::time_point time_EndMerge = std::chrono::steady_clock::now();
+
+            double timeMergeTotal =
+                std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(time_EndMerge - time_StartMerge)
+                    .count();
+            vdMergeTotal_ms.push_back(timeMergeTotal);
+#endif
+
+            Verbose::PrintMess("Merge finished!", Verbose::VERBOSITY_QUIET);
+            // 记录时间戳
+            vdPR_CurrentTime.push_back(mpCurrentKF->mTimeStamp);
+            vdPR_MatchedTime.push_back(mpMergeMatchedKF->mTimeStamp);
+            // 标记Place recognition结果为地图融合
+            vnPR_TypeRecogn.push_back(1);
+
+            // Reset all variables
+            // 重置所有融合相关变量
+            mpMergeLastCurrentKF->SetErase();
+            mpMergeMatchedKF->SetErase();
+            mnMergeNumCoincidences = 0;
+            mvpMergeMatchedMPs.clear();
+            mvpMergeMPs.clear();
+            mnMergeNumNotFound = 0;
+            mbMergeDetected    = false;
+
+            // 重置所有回环相关变量, 说明对与当前帧同时有回环和融合的情况只进行融合
+            if (mbLoopDetected)
+            {
+                // Reset Loop variables
+                mpLoopLastCurrentKF->SetErase();
+                mpLoopMatchedKF->SetErase();
+                mnLoopNumCoincidences = 0;
+                mvpLoopMatchedMPs.clear();
+                mvpLoopMPs.clear();
+                mnLoopNumNotFound = 0;
+                mbLoopDetected    = false;
+            }
+        }
+
+        // Step 4 如果(没有检测到融合)检测到回环, 则回环矫正
+        if (mbLoopDetected)
+        {
+            // 标记时间戳
+            bool bGoodLoop = true;
+            vdPR_CurrentTime.push_back(mpCurrentKF->mTimeStamp);
+            vdPR_MatchedTime.push_back(mpLoopMatchedKF->mTimeStamp);
+            vnPR_TypeRecogn.push_back(0);
+
+            Verbose::PrintMess("*Loop detected", Verbose::VERBOSITY_QUIET);
+            // 更新 mg2oLoopScw
+            mg2oLoopScw = mg2oLoopSlw;  //*mvg2oSim3LoopTcw[nCurrentIndex];
+            // 如果是带imu的模式则做下判断，纯视觉跳过
+            if (mpCurrentKF->GetMap()->IsInertial())
+            {
+                // 拿到当前关键帧相对于世界坐标系的位姿
+                Sophus::SE3d Twc = mpCurrentKF->GetPoseInverse().cast<double>();
+                g2o::Sim3    g2oTwc(Twc.unit_quaternion(), Twc.translation(), 1.0);
+
+                // mg2oLoopScw是通过回环检测的Sim3计算出的回环矫正后的当前关键帧的初始位姿,
+                // Twc是当前关键帧回环矫正前的位姿. g2oSww_new 可以理解为correction
+                g2o::Sim3 g2oSww_new = g2oTwc * mg2oLoopScw;
+
+                // 拿到 roll ,pitch ,yaw
+                Eigen::Vector3d phi = LogSO3(g2oSww_new.rotation().toRotationMatrix());
+                cout << "phi = " << phi.transpose() << endl;
+                // 这里算是通过imu重力方向验证回环结果, 如果pitch或roll角度偏差稍微有一点大,则回环失败.
+                // 对yaw容忍比较大(20度)
+                if (fabs(phi(0)) < 0.008f && fabs(phi(1)) < 0.008f && fabs(phi(2)) < 0.349f)
+                {
+                    // 如果是imu模式
+                    if (mpCurrentKF->GetMap()->IsInertial())
+                    {
+                        // If inertial, force only yaw
+                        // 如果是imu模式,强制将焊接变换的的 roll 和 pitch 设为0
+                        if ((mpTracker->mSensor == System::IMU_MONOCULAR || mpTracker->mSensor == System::IMU_STEREO ||
+                             mpTracker->mSensor == System::IMU_RGBD) &&
+                            mpCurrentKF->GetMap()->GetIniertialBA2())
+                        {
+                            phi(0)      = 0;
+                            phi(1)      = 0;
+                            g2oSww_new  = g2o::Sim3(ExpSO3(phi), g2oSww_new.translation(), 1.0);
+                            mg2oLoopScw = g2oTwc.inverse() * g2oSww_new;
+                        }
+                    }
+                }
+                else
+                {
+                    cout << "BAD LOOP!!!" << endl;
+                    bGoodLoop = false;
+                }
+            }
+
+            if (bGoodLoop)
+            {
+                mvpLoopMapPoints = mvpLoopMPs;
+
+#ifdef REGISTER_TIMES
+                std::chrono::steady_clock::time_point time_StartLoop = std::chrono::steady_clock::now();
+
+                nLoop += 1;
+
+#endif
+                // 开启回环矫正
+                CorrectLoop();
+#ifdef REGISTER_TIMES
+                std::chrono::steady_clock::time_point time_EndLoop = std::chrono::steady_clock::now();
+
+                double timeLoopTotal =
+                    std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(time_EndLoop - time_StartLoop)
+                        .count();
+                vdLoopTotal_ms.push_back(timeLoopTotal);
+#endif
+
+                mnNumCorrection += 1;
+            }
+
+            // Reset all variables
+            // 重置所有的回环变量
+            mpLoopLastCurrentKF->SetErase();
+            mpLoopMatchedKF->SetErase();
+            mnLoopNumCoincidences = 0;
+            mvpLoopMatchedMPs.clear();
+            mvpLoopMPs.clear();
+            mnLoopNumNotFound = 0;
+            mbLoopDetected    = false;
         }
         // 查看是否有外部线程请求复位当前线程
         ResetIfRequested();
 
         // 查看外部线程是否有终止当前线程的请求,如果有的话就跳出这个线程的主函数的主循环
-        if(CheckFinish()){
+        if (CheckFinish())
+        {
             break;
         }
 
