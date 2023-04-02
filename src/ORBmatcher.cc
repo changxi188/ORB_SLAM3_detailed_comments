@@ -804,40 +804,37 @@ namespace ORB_SLAM3
 
             // Step 4 对最优次优结果进行检查，满足阈值、最优/次优比例，删除重复匹配
             // 即使算出了最佳描述子匹配距离，也不一定保证配对成功。要小于设定阈值
-            if(bestDist<=TH_LOW)
+            if (bestDist <= TH_LOW && (bestDist < (float)bestDist2 * mfNNratio))
             {
                 // 最佳距离比次佳距离要小于设定的比例，这样特征点辨识度更高
-                if(bestDist<(float)bestDist2*mfNNratio)
+                // 如果找到的候选特征点对应F1中特征点已经匹配过了，说明发生了重复匹配，将原来的匹配也删掉
+                if (vnMatches21[bestIdx2] >= 0)
                 {
-                    // 如果找到的候选特征点对应F1中特征点已经匹配过了，说明发生了重复匹配，将原来的匹配也删掉
-                    if(vnMatches21[bestIdx2]>=0)
-                    {
-                        vnMatches12[vnMatches21[bestIdx2]]=-1;
-                        nmatches--;
-                    }
-                    // 次优的匹配关系，双向建立
-                    // vnMatches12保存参考帧F1和F2匹配关系，index保存是F1对应特征点索引，值保存的是匹配好的F2特征点索引
-                    vnMatches12[i1]=bestIdx2;
-                    vnMatches21[bestIdx2]=i1;
-                    vMatchedDistance[bestIdx2]=bestDist;
-                    nmatches++;
+                    vnMatches12[vnMatches21[bestIdx2]] = -1;
+                    nmatches--;
+                }
+                // 次优的匹配关系，双向建立
+                // vnMatches12保存参考帧F1和F2匹配关系，index保存是F1对应特征点索引，值保存的是匹配好的F2特征点索引
+                vnMatches12[i1]            = bestIdx2;
+                vnMatches21[bestIdx2]      = i1;
+                vMatchedDistance[bestIdx2] = bestDist;
+                nmatches++;
 
-                    // Step 5 计算匹配点旋转角度差所在的直方图
-                    if(mbCheckOrientation)
-                    {
-                        // 计算匹配特征点的角度差，这里单位是角度°，不是弧度
-                        float rot = F1.mvKeysUn[i1].angle-F2.mvKeysUn[bestIdx2].angle;
-                        if(rot<0.0)
-                            rot+=360.0f;
-                        // 前面factor = HISTO_LENGTH/360.0f 
-                        // bin = rot / 360.of * HISTO_LENGTH 表示当前rot被分配在第几个直方图bin  
-                        int bin = round(rot*factor);
-                        // 如果bin 满了又是一个轮回
-                        if(bin==HISTO_LENGTH)
-                            bin=0;
-                        assert(bin>=0 && bin<HISTO_LENGTH);
-                        rotHist[bin].push_back(i1);
-                    }
+                // Step 5 计算匹配点旋转角度差所在的直方图
+                if (mbCheckOrientation)
+                {
+                    // 计算匹配特征点的角度差，这里单位是角度°，不是弧度
+                    float rot = F1.mvKeysUn[i1].angle - F2.mvKeysUn[bestIdx2].angle;
+                    if (rot < 0.0)
+                        rot += 360.0f;
+                    // 前面factor = HISTO_LENGTH/360.0f
+                    // bin = rot / 360.of * HISTO_LENGTH 表示当前rot被分配在第几个直方图bin
+                    int bin = round(rot * factor);
+                    // 如果bin 满了又是一个轮回
+                    if (bin == HISTO_LENGTH)
+                        bin = 0;
+                    assert(bin >= 0 && bin < HISTO_LENGTH);
+                    rotHist[bin].push_back(i1);
                 }
             }
 
