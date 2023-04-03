@@ -39,6 +39,7 @@
 
 #include "GeometricCamera.h"
 
+#include <glog/logging.h>
 #include <mutex>
 #include <unordered_set>
 
