@@ -87,7 +87,7 @@ void Map::AddKeyFrame(KeyFrame* pKF)
     unique_lock<mutex> lock(mMutexMap);
     if (mspKeyFrames.empty())
     {
-        cout << "First KF:" << pKF->mnId << "; Map init KF:" << mnInitKFid << endl;
+        LOG(INFO) << "AddKeyFrame --- First KF:" << pKF->mnId << "; Map init KF:" << mnInitKFid << endl;
         mnInitKFid  = pKF->mnId;
         mpKFinitial = pKF;
         mpKFlowerID = pKF;

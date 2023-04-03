@@ -38,8 +38,15 @@ void LoadIMU(const string& strImuPath, vector<double>& vTimeStamps, vector<cv::P
              vector<cv::Point3f>& vGyro);
 
 double ttrack_tot = 0;
-int    main(int argc, char* argv[])
+
+int main(int argc, char* argv[])
 {
+    google::InitGoogleLogging(argv[0]);
+
+    FLAGS_colorlogtostderr = true;
+    FLAGS_alsologtostderr  = true;
+    FLAGS_minloglevel      = 0;
+
     if (argc < 5)
     {
         LOG(ERROR) << endl
@@ -227,9 +234,10 @@ int    main(int argc, char* argv[])
             if (ttrack < T)
                 usleep((T - ttrack) * 1e6);  // 1e6
         }
+
         if (seq < num_seq - 1)
         {
-            LOG(INFO) << "Changing the dataset" << endl;
+            LOG(WARNING) << "--------------------- Changing the dataset ------------------------- \n\n" << endl;
 
             SLAM.ChangeDataset();
         }

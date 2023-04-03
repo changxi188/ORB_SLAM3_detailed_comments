@@ -281,7 +281,7 @@ System::System(const string& strVocFile, const string& strSettingsFile, const eS
 
     // Fix verbosity
     // 打印输出中间的信息，设置为安静模式
-    Verbose::SetTh(Verbose::VERBOSITY_QUIET);
+    Verbose::SetTh(Verbose::VERBOSITY_DEBUG);
 }
 
 Sophus::SE3f System::TrackStereo(const cv::Mat& imLeft, const cv::Mat& imRight, const double& timestamp,
@@ -520,7 +520,7 @@ Sophus::SE3f System::TrackMonocular(const cv::Mat& im, const double& timestamp, 
         // 如果检测到重置活动地图的标志为true,将重置地图
         else if (mbResetActiveMap)
         {
-            LOG(INFO) << "SYSTEM-> Reseting active map in monocular case" << endl;
+            LOG(WARNING) << "TrackMonocular ---  Reseting active map in monocular case" << endl;
             mpTracker->ResetActiveMap();
             mbResetActiveMap = false;
         }
