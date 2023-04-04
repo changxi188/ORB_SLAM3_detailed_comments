@@ -2246,7 +2246,7 @@ void Tracking::Track()
             {
                 LOG(INFO) << "Track --- Track with respect to the reference KF ";
                 bOK = TrackReferenceKeyFrame();
-                LOG(INFO) << "Track --- TrackReferenceKeyFrame : " << bOK;
+                LOG(INFO) << "Track --- TrackReferenceKeyFrame is success : " << bOK;
             }
             else
             {
@@ -2257,7 +2257,7 @@ void Tracking::Track()
                 bOK = TrackWithMotionModel();
                 if (!bOK)
                     bOK = TrackReferenceKeyFrame();  // 根据恒速模型失败了，只能根据参考关键帧来跟踪
-                LOG(INFO) << "Track --- TrackWithMotionModel : " << bOK;
+                LOG(INFO) << "Track --- TrackWithMotionModel is success : " << bOK;
             }
 
             // 新增了一个状态RECENTLY_LOST，主要是结合IMU看看能不能拽回来
@@ -3100,7 +3100,8 @@ void Tracking::CreateInitialMapMonocular()
 
     // Bundle Adjustment
     // Step 4 全局BA优化，同时优化所有位姿和三维点
-    LOG(INFO) << "New Map created with " + to_string(mpAtlas->MapPointsInMap()) + " points";
+    LOG(INFO) << "CreateInitialMapMoncular --- New Map created with " + to_string(mpAtlas->MapPointsInMap()) +
+                     " points";
     LOG(INFO) << "CreateInitialMapMonocular --- GlobalBundleAdjustment";
     Optimizer::GlobalBundleAdjustemnt(mpAtlas->GetCurrentMap(), 20);
 
@@ -3216,7 +3217,7 @@ void Tracking::CreateMapInAtlas()
     mbVelocity = false;
     // mnLastRelocFrameId = mnLastInitFrameId; // The last relocation KF_id is the current id, because it is the new
     // starting point for new map
-    LOG(INFO) << "First frame id in map: " + to_string(mnLastInitFrameId + 1);
+    LOG(INFO) << "CreateMapInAtlas --- First frame id in map: " + to_string(mnLastInitFrameId + 1);
     mbVO = false;  // Init value for know if there are enough MapPoints in the last KF
     if (mSensor == System::MONOCULAR || mSensor == System::IMU_MONOCULAR)
     {
@@ -3299,7 +3300,7 @@ bool Tracking::TrackReferenceKeyFrame()
     // 匹配数目小于15，认为跟踪失败
     if (nmatches < 15)
     {
-        LOG(INFO) << "TRACK_REF_KF: Less than 15 matches!!\n";
+        LOG(WARNING) << "TrackReferenceKeyFrame --- Less than 15 matches!!\n";
         return false;
     }
 
@@ -3320,38 +3321,45 @@ bool Tracking::TrackReferenceKeyFrame()
     for (int i = 0; i < mCurrentFrame.N; i++)
     {
         // if(i >= mCurrentFrame.Nleft) break;
-        if (mCurrentFrame.mvpMapPoints[i])
+        if (!mCurrentFrame.mvpMapPoints[i])
         {
-            // 如果对应到的某个特征点是外点
-            if (mCurrentFrame.mvbOutlier[i])
-            {
-                // 清除它在当前帧中存在过的痕迹
-                MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
+            continue;
+        }
+        // 如果对应到的某个特征点是外点
+        if (mCurrentFrame.mvbOutlier[i])
+        {
+            // 清除它在当前帧中存在过的痕迹
+            MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
 
-                mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint*>(NULL);
-                mCurrentFrame.mvbOutlier[i]   = false;
-                if (i < mCurrentFrame.Nleft)
-                {
-                    pMP->mbTrackInView = false;
-                }
-                else
-                {
-                    pMP->mbTrackInViewR = false;
-                }
-                pMP->mbTrackInView   = false;
-                pMP->mnLastFrameSeen = mCurrentFrame.mnId;
-                nmatches--;
+            mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint*>(NULL);
+            mCurrentFrame.mvbOutlier[i]   = false;
+            if (i < mCurrentFrame.Nleft)
+            {
+                pMP->mbTrackInView = false;
             }
-            else if (mCurrentFrame.mvpMapPoints[i]->Observations() > 0)
-                // 匹配的内点计数++
-                nmatchesMap++;
+            else
+            {
+                pMP->mbTrackInViewR = false;
+            }
+            pMP->mbTrackInView   = false;
+            pMP->mnLastFrameSeen = mCurrentFrame.mnId;
+            nmatches--;
+        }
+        else if (mCurrentFrame.mvpMapPoints[i]->Observations() > 0)
+        {
+            // 匹配的内点计数++
+            nmatchesMap++;
         }
     }
 
     if (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
+    {
         return true;
+    }
     else
+    {
         return nmatchesMap >= 10;  // 跟踪成功的数目超过10才认为跟踪成功，否则跟踪失败
+    }
 }
 
 /**
@@ -3598,8 +3606,10 @@ bool Tracking::TrackLocalMap()
     mTrackedFr++;
 
     // Step 1：更新局部关键帧 mvpLocalKeyFrames 和局部地图点 mvpLocalMapPoints
+    LOG(INFO) << "Track --- Update local map";
     UpdateLocalMap();
     // Step 2：筛选局部地图中新增的在视野范围内的地图点，投影到当前帧搜索匹配，得到更多的匹配关系
+    LOG(INFO) << "Track --- Search local points";
     SearchLocalPoints();
 
     // TOO check outliers before PO
@@ -3624,33 +3634,30 @@ bool Tracking::TrackLocalMap()
         LOG(INFO) << "TrackLocalMap --- imu is not initialized, PoseOptimization";
         Optimizer::PoseOptimization(&mCurrentFrame);
     }
-    else
+    else if (mCurrentFrame.mnId <= mnLastRelocFrameId + mnFramesToResetIMU)
     {
         // 初始化，重定位，重新开启一个地图都会使mnLastRelocFrameId变化
-        if (mCurrentFrame.mnId <= mnLastRelocFrameId + mnFramesToResetIMU)
+        LOG(INFO) << "TrackLocalMap --- just relocalization, PoseOptimization";
+        Optimizer::PoseOptimization(&mCurrentFrame);
+    }
+    else  // 如果积累的IMU数据量比较多，考虑使用IMU数据优化
+    {
+        // if(!mbMapUpdated && mState == OK) //  && (mnMatchesInliers>30))
+        // mbMapUpdated变化见Tracking::PredictStateIMU()
+        // 未更新地图
+        if (!mbMapUpdated)  //  && (mnMatchesInliers>30))
         {
-            LOG(INFO) << "TrackLocalMap --- PoseOptimization";
-            Optimizer::PoseOptimization(&mCurrentFrame);
+            LOG(INFO) << "TrackLocalMap --- mp not updated, PoseInertialOptimizationLastFrame ";
+            // 使用上一普通帧以及当前帧的视觉信息和IMU信息联合优化当前帧位姿、速度和IMU零偏
+            inliers = Optimizer::PoseInertialOptimizationLastFrame(
+                &mCurrentFrame);  // , !mpLastKeyFrame->GetMap()->GetIniertialBA1());
         }
-        else  // 如果积累的IMU数据量比较多，考虑使用IMU数据优化
+        else
         {
-            // if(!mbMapUpdated && mState == OK) //  && (mnMatchesInliers>30))
-            // mbMapUpdated变化见Tracking::PredictStateIMU()
-            // 未更新地图
-            if (!mbMapUpdated)  //  && (mnMatchesInliers>30))
-            {
-                LOG(INFO) << "TrackLocalMap --- PoseInertialOptimizationLastFrame ";
-                // 使用上一普通帧以及当前帧的视觉信息和IMU信息联合优化当前帧位姿、速度和IMU零偏
-                inliers = Optimizer::PoseInertialOptimizationLastFrame(
-                    &mCurrentFrame);  // , !mpLastKeyFrame->GetMap()->GetIniertialBA1());
-            }
-            else
-            {
-                LOG(INFO) << "TrackLocalMap --- PoseInertialOptimizationLastKeyFrame ";
-                // 使用上一关键帧以及当前帧的视觉信息和IMU信息联合优化当前帧位姿、速度和IMU零偏
-                inliers = Optimizer::PoseInertialOptimizationLastKeyFrame(
-                    &mCurrentFrame);  // , !mpLastKeyFrame->GetMap()->GetIniertialBA1());
-            }
+            LOG(INFO) << "TrackLocalMap --- map updated, PoseInertialOptimizationLastKeyFrame ";
+            // 使用上一关键帧以及当前帧的视觉信息和IMU信息联合优化当前帧位姿、速度和IMU零偏
+            inliers = Optimizer::PoseInertialOptimizationLastKeyFrame(
+                &mCurrentFrame);  // , !mpLastKeyFrame->GetMap()->GetIniertialBA1());
         }
     }
 
@@ -4133,22 +4140,24 @@ void Tracking::SearchLocalPoints()
          vit != vend; vit++)
     {
         MapPoint* pMP = *vit;
-        if (pMP)
+        if (!pMP)
         {
-            if (pMP->isBad())
-            {
-                *vit = static_cast<MapPoint*>(NULL);
-            }
-            else
-            {
-                // 更新能观测到该点的帧数加1(被当前帧观测了)
-                pMP->IncreaseVisible();
-                // 标记该点被当前帧观测到
-                pMP->mnLastFrameSeen = mCurrentFrame.mnId;
-                // 标记该点在后面搜索匹配时不被投影，因为已经有匹配了
-                pMP->mbTrackInView  = false;
-                pMP->mbTrackInViewR = false;
-            }
+            continue;
+        }
+
+        if (pMP->isBad())
+        {
+            *vit = static_cast<MapPoint*>(NULL);
+        }
+        else
+        {
+            // 更新能观测到该点的帧数加1(被当前帧观测了)
+            pMP->IncreaseVisible();
+            // 标记该点被当前帧观测到
+            pMP->mnLastFrameSeen = mCurrentFrame.mnId;
+            // 标记该点在后面搜索匹配时不被投影，因为已经有匹配了
+            pMP->mbTrackInView  = false;
+            pMP->mbTrackInViewR = false;
         }
     }
 
@@ -4227,6 +4236,7 @@ void Tracking::UpdateLocalMap()
 {
     // This is for visualization
     // 设置参考地图点用于绘图显示局部地图点（红色）
+    LOG(INFO) << "UpdateLocalMap --- set reference map points";
     mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints);
 
     // Update
@@ -4240,6 +4250,7 @@ void Tracking::UpdateLocalMap()
  */
 void Tracking::UpdateLocalPoints()
 {
+    LOG(INFO) << "UpdateLocalPoints --- get Covisibility mappoints";
     // Step 1：清空局部地图点
     mvpLocalMapPoints.clear();
 
@@ -4258,17 +4269,24 @@ void Tracking::UpdateLocalPoints()
         {
             MapPoint* pMP = *itMP;
             if (!pMP)
+            {
                 continue;
+            }
             // 用该地图点的成员变量mnTrackReferenceForFrame 记录当前帧的id
             // 表示它已经是当前帧的局部地图点了，可以防止重复添加局部地图点
             if (pMP->mnTrackReferenceForFrame == mCurrentFrame.mnId)
-                continue;
-            if (!pMP->isBad())
             {
-                count_pts++;
-                mvpLocalMapPoints.push_back(pMP);
-                pMP->mnTrackReferenceForFrame = mCurrentFrame.mnId;
+                continue;
             }
+
+            if (pMP->isBad())
+            {
+                continue;
+            }
+
+            count_pts++;
+            mvpLocalMapPoints.push_back(pMP);
+            pMP->mnTrackReferenceForFrame = mCurrentFrame.mnId;
         }
     }
 }
@@ -4285,6 +4303,7 @@ void Tracking::UpdateLocalPoints()
  */
 void Tracking::UpdateLocalKeyFrames()
 {
+    LOG(INFO) << "UpdateLocalKeyFrames --- get Covisibility frames";
     // Each map point vote for the keyframes in which it has been observed
     // Step 1：遍历当前帧的地图点，记录所有能观测到当前帧地图点的关键帧
     map<KeyFrame*, int> keyframeCounter;
@@ -4294,27 +4313,30 @@ void Tracking::UpdateLocalKeyFrames()
         for (int i = 0; i < mCurrentFrame.N; i++)
         {
             MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
-            if (pMP)
+            if (!pMP)
             {
-                if (!pMP->isBad())
+                continue;
+            }
+            if (!pMP->isBad())
+            {
+                // 得到观测到该地图点的关键帧和该地图点在关键帧中的索引
+                const map<KeyFrame*, tuple<int, int>> observations = pMP->GetObservations();
+                // 由于一个地图点可以被多个关键帧观测到,因此对于每一次观测,都对观测到这个地图点的关键帧进行累计投票
+                for (map<KeyFrame*, tuple<int, int>>::const_iterator it    = observations.begin(),
+                                                                     itend = observations.end();
+                     it != itend; it++)
                 {
-                    // 得到观测到该地图点的关键帧和该地图点在关键帧中的索引
-                    const map<KeyFrame*, tuple<int, int>> observations = pMP->GetObservations();
-                    // 由于一个地图点可以被多个关键帧观测到,因此对于每一次观测,都对观测到这个地图点的关键帧进行累计投票
-                    for (map<KeyFrame*, tuple<int, int>>::const_iterator it    = observations.begin(),
-                                                                         itend = observations.end();
-                         it != itend; it++)
-                        // 这里的操作非常精彩！
-                        // map[key] = value，当要插入的键存在时，会覆盖键对应的原来的值。如果键不存在，则添加一组键值对
-                        // it->first 是地图点看到的关键帧，同一个关键帧看到的地图点会累加到该关键帧计数
-                        // 所以最后keyframeCounter
-                        // 第一个参数表示某个关键帧，第2个参数表示该关键帧看到了多少当前帧(mCurrentFrame)的地图点，也就是共视程度
-                        keyframeCounter[it->first]++;
+                    // 这里的操作非常精彩！
+                    // map[key] = value，当要插入的键存在时，会覆盖键对应的原来的值。如果键不存在，则添加一组键值对
+                    // it->first 是地图点看到的关键帧，同一个关键帧看到的地图点会累加到该关键帧计数
+                    // 所以最后keyframeCounter
+                    // 第一个参数表示某个关键帧，第2个参数表示该关键帧看到了多少当前帧(mCurrentFrame)的地图点，也就是共视程度
+                    keyframeCounter[it->first]++;
                 }
-                else
-                {
-                    mCurrentFrame.mvpMapPoints[i] = NULL;
-                }
+            }
+            else
+            {
+                mCurrentFrame.mvpMapPoints[i] = NULL;
             }
         }
     }
@@ -4324,24 +4346,29 @@ void Tracking::UpdateLocalKeyFrames()
         for (int i = 0; i < mLastFrame.N; i++)
         {
             // Using lastframe since current frame has not matches yet
-            if (mLastFrame.mvpMapPoints[i])
+            if (!mLastFrame.mvpMapPoints[i])
             {
-                MapPoint* pMP = mLastFrame.mvpMapPoints[i];
-                if (!pMP)
-                    continue;
-                if (!pMP->isBad())
+                continue;
+            }
+            MapPoint* pMP = mLastFrame.mvpMapPoints[i];
+            if (!pMP)
+            {
+                continue;
+            }
+            if (!pMP->isBad())
+            {
+                const map<KeyFrame*, tuple<int, int>> observations = pMP->GetObservations();
+                for (map<KeyFrame*, tuple<int, int>>::const_iterator it    = observations.begin(),
+                                                                     itend = observations.end();
+                     it != itend; it++)
                 {
-                    const map<KeyFrame*, tuple<int, int>> observations = pMP->GetObservations();
-                    for (map<KeyFrame*, tuple<int, int>>::const_iterator it    = observations.begin(),
-                                                                         itend = observations.end();
-                         it != itend; it++)
-                        keyframeCounter[it->first]++;
+                    keyframeCounter[it->first]++;
                 }
-                else
-                {
-                    // MODIFICATION
-                    mLastFrame.mvpMapPoints[i] = NULL;
-                }
+            }
+            else
+            {
+                // MODIFICATION
+                mLastFrame.mvpMapPoints[i] = NULL;
             }
         }
     }
@@ -4365,7 +4392,9 @@ void Tracking::UpdateLocalKeyFrames()
 
         // 如果设定为要删除的，跳过
         if (pKF->isBad())
+        {
             continue;
+        }
 
         // 寻找具有最大观测数目的关键帧
         if (it->second > max)
@@ -4389,7 +4418,9 @@ void Tracking::UpdateLocalKeyFrames()
         // Limit the number of keyframes
         // 处理的局部关键帧不超过80帧
         if (mvpLocalKeyFrames.size() > 80)  // 80
+        {
             break;
+        }
 
         KeyFrame* pKF = *itKF;
 
@@ -4402,15 +4433,17 @@ void Tracking::UpdateLocalKeyFrames()
              itNeighKF != itEndNeighKF; itNeighKF++)
         {
             KeyFrame* pNeighKF = *itNeighKF;
-            if (!pNeighKF->isBad())
+            if (pNeighKF->isBad())
             {
-                // mnTrackReferenceForFrame防止重复添加局部关键帧
-                if (pNeighKF->mnTrackReferenceForFrame != mCurrentFrame.mnId)
-                {
-                    mvpLocalKeyFrames.push_back(pNeighKF);
-                    pNeighKF->mnTrackReferenceForFrame = mCurrentFrame.mnId;
-                    break;
-                }
+                continue;
+            }
+
+            // mnTrackReferenceForFrame防止重复添加局部关键帧
+            if (pNeighKF->mnTrackReferenceForFrame != mCurrentFrame.mnId)
+            {
+                mvpLocalKeyFrames.push_back(pNeighKF);
+                pNeighKF->mnTrackReferenceForFrame = mCurrentFrame.mnId;
+                break;
             }
         }
 
@@ -4419,14 +4452,16 @@ void Tracking::UpdateLocalKeyFrames()
         for (set<KeyFrame*>::const_iterator sit = spChilds.begin(), send = spChilds.end(); sit != send; sit++)
         {
             KeyFrame* pChildKF = *sit;
-            if (!pChildKF->isBad())
+            if (pChildKF->isBad())
             {
-                if (pChildKF->mnTrackReferenceForFrame != mCurrentFrame.mnId)
-                {
-                    mvpLocalKeyFrames.push_back(pChildKF);
-                    pChildKF->mnTrackReferenceForFrame = mCurrentFrame.mnId;
-                    break;
-                }
+                continue;
+            }
+
+            if (pChildKF->mnTrackReferenceForFrame != mCurrentFrame.mnId)
+            {
+                mvpLocalKeyFrames.push_back(pChildKF);
+                pChildKF->mnTrackReferenceForFrame = mCurrentFrame.mnId;
+                break;
             }
         }
 
@@ -4455,7 +4490,9 @@ void Tracking::UpdateLocalKeyFrames()
         for (int i = 0; i < Nd; i++)
         {
             if (!tempKeyFrame)
+            {
                 break;
+            }
             if (tempKeyFrame->mnTrackReferenceForFrame != mCurrentFrame.mnId)
             {
                 mvpLocalKeyFrames.push_back(tempKeyFrame);

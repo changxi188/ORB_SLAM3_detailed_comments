@@ -102,7 +102,8 @@
 		"xstring": "cpp",
 		"xtr1common": "cpp",
 		"xutility": "cpp",
-		"condition_variable": "cpp"
+		"condition_variable": "cpp",
+		"*.tcc": "cpp"
 	},
 	"ros.distro": "melodic"
 }

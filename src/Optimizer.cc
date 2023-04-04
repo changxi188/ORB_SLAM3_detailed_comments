@@ -117,161 +117,164 @@ int Optimizer::PoseOptimization(Frame* pFrame)
         {
             MapPoint* pMP = pFrame->mvpMapPoints[i];
             // 如果这个地图点还存在没有被剔除掉
-            if (pMP)
+            if (!pMP)
             {
-                // Conventional SLAM
-                //  不存在相机2，则有可能为单目与双目
-                if (!pFrame->mpCamera2)
-                {
-                    // Monocular observation
-                    // 单目情况，因为双目模式下pFrame->mvuRight[i]会大于0
-                    if (pFrame->mvuRight[i] < 0)
-                    {
-                        nInitialCorrespondences++;
-                        pFrame->mvbOutlier[i] = false;
+                continue;
+            }
 
-                        // 对这个地图点的观测，也就是去畸变像素坐标
-                        Eigen::Matrix<double, 2, 1> obs;
-                        const cv::KeyPoint&         kpUn = pFrame->mvKeysUn[i];
-                        obs << kpUn.pt.x, kpUn.pt.y;
-                        // 新建节点,注意这个节点的只是优化位姿Pose
-                        ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose* e = new ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose();
-
-                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
-                        e->setMeasurement(obs);
-                        // 这个点的可信程度和特征点所在的图层有关，层数约高invSigma2越小，信息矩阵越小，表示误差越大，优化时考虑的比较少
-                        const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
-                        e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
-                        // 在这里使用了鲁棒核函数
-                        g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                        e->setRobustKernel(rk);
-                        rk->setDelta(deltaMono);
-
-                        // 设置相机
-                        e->pCamera = pFrame->mpCamera;
-                        // 地图点的空间位置,作为迭代的初始值，因为是一元边，所以不以节点的形式出现
-                        e->Xw = pMP->GetWorldPos().cast<double>();
-
-                        optimizer.addEdge(e);
-
-                        vpEdgesMono.push_back(e);
-                        vnIndexEdgeMono.push_back(i);
-                    }
-                    else  // 双目
-                    {
-                        nInitialCorrespondences++;
-                        pFrame->mvbOutlier[i] = false;
-
-                        // SET EDGE
-                        //  观测多了一项右目的坐标
-                        Eigen::Matrix<double, 3, 1> obs;
-                        const cv::KeyPoint&         kpUn  = pFrame->mvKeysUn[i];
-                        const float&                kp_ur = pFrame->mvuRight[i];
-                        obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-                        // 新建节点,注意这里也是只优化位姿
-                        g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = new g2o::EdgeStereoSE3ProjectXYZOnlyPose();
-
-                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
-                        e->setMeasurement(obs);
-                        // 置信程度主要是看左目特征点所在的图层
-                        const float     invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
-                        Eigen::Matrix3d Info      = Eigen::Matrix3d::Identity() * invSigma2;
-                        e->setInformation(Info);
-
-                        g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                        e->setRobustKernel(rk);
-                        rk->setDelta(deltaStereo);
-
-                        // 双目下没有加入相机
-                        e->fx = pFrame->fx;
-                        e->fy = pFrame->fy;
-                        e->cx = pFrame->cx;
-                        e->cy = pFrame->cy;
-                        e->bf = pFrame->mbf;
-                        e->Xw = pMP->GetWorldPos().cast<double>();
-
-                        optimizer.addEdge(e);
-
-                        vpEdgesStereo.push_back(e);
-                        vnIndexEdgeStereo.push_back(i);
-                    }
-                }
-                // SLAM with respect a rigid body
-                else  // 两个相机
+            // Conventional SLAM
+            //  不存在相机2，则有可能为单目与双目
+            if (!pFrame->mpCamera2)
+            {
+                // Monocular observation
+                // 单目情况，因为双目模式下pFrame->mvuRight[i]会大于0
+                if (pFrame->mvuRight[i] < 0)
                 {
                     nInitialCorrespondences++;
+                    pFrame->mvbOutlier[i] = false;
 
-                    cv::KeyPoint kpUn;
-                    // 总数N = 相机1所有特征点数量+相机2所有特征点数量
-                    if (i < pFrame->Nleft)
-                    {  // Left camera observation
-                        kpUn = pFrame->mvKeys[i];
+                    // 对这个地图点的观测，也就是去畸变像素坐标
+                    Eigen::Matrix<double, 2, 1> obs;
+                    const cv::KeyPoint&         kpUn = pFrame->mvKeysUn[i];
+                    obs << kpUn.pt.x, kpUn.pt.y;
+                    // 新建节点,注意这个节点的只是优化位姿Pose
+                    ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose* e = new ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose();
 
-                        pFrame->mvbOutlier[i] = false;
+                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
+                    e->setMeasurement(obs);
+                    // 这个点的可信程度和特征点所在的图层有关，层数约高invSigma2越小，信息矩阵越小，表示误差越大，优化时考虑的比较少
+                    const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
+                    e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+                    // 在这里使用了鲁棒核函数
+                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                    e->setRobustKernel(rk);
+                    rk->setDelta(deltaMono);
 
-                        Eigen::Matrix<double, 2, 1> obs;
-                        obs << kpUn.pt.x, kpUn.pt.y;
+                    // 设置相机
+                    e->pCamera = pFrame->mpCamera;
+                    // 地图点的空间位置,作为迭代的初始值，因为是一元边，所以不以节点的形式出现
+                    e->Xw = pMP->GetWorldPos().cast<double>();
 
-                        ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose* e = new ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose();
+                    optimizer.addEdge(e);
 
-                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
-                        e->setMeasurement(obs);
-                        const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
-                        e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+                    vpEdgesMono.push_back(e);
+                    vnIndexEdgeMono.push_back(i);
+                }
+                else  // 双目
+                {
+                    nInitialCorrespondences++;
+                    pFrame->mvbOutlier[i] = false;
 
-                        g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                        e->setRobustKernel(rk);
-                        rk->setDelta(deltaMono);
+                    // SET EDGE
+                    //  观测多了一项右目的坐标
+                    Eigen::Matrix<double, 3, 1> obs;
+                    const cv::KeyPoint&         kpUn  = pFrame->mvKeysUn[i];
+                    const float&                kp_ur = pFrame->mvuRight[i];
+                    obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+                    // 新建节点,注意这里也是只优化位姿
+                    g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = new g2o::EdgeStereoSE3ProjectXYZOnlyPose();
 
-                        e->pCamera = pFrame->mpCamera;
-                        e->Xw      = pMP->GetWorldPos().cast<double>();
+                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
+                    e->setMeasurement(obs);
+                    // 置信程度主要是看左目特征点所在的图层
+                    const float     invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
+                    Eigen::Matrix3d Info      = Eigen::Matrix3d::Identity() * invSigma2;
+                    e->setInformation(Info);
 
-                        optimizer.addEdge(e);
+                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                    e->setRobustKernel(rk);
+                    rk->setDelta(deltaStereo);
 
-                        vpEdgesMono.push_back(e);
-                        vnIndexEdgeMono.push_back(i);
-                    }
-                    else
-                    {  // Right camera observation
-                        kpUn = pFrame->mvKeysRight[i - pFrame->Nleft];
+                    // 双目下没有加入相机
+                    e->fx = pFrame->fx;
+                    e->fy = pFrame->fy;
+                    e->cx = pFrame->cx;
+                    e->cy = pFrame->cy;
+                    e->bf = pFrame->mbf;
+                    e->Xw = pMP->GetWorldPos().cast<double>();
 
-                        Eigen::Matrix<double, 2, 1> obs;
-                        obs << kpUn.pt.x, kpUn.pt.y;
+                    optimizer.addEdge(e);
 
-                        pFrame->mvbOutlier[i] = false;
+                    vpEdgesStereo.push_back(e);
+                    vnIndexEdgeStereo.push_back(i);
+                }
+            }
+            // SLAM with respect a rigid body
+            else  // 两个相机
+            {
+                nInitialCorrespondences++;
 
-                        ORB_SLAM3::EdgeSE3ProjectXYZOnlyPoseToBody* e =
-                            new ORB_SLAM3::EdgeSE3ProjectXYZOnlyPoseToBody();
+                cv::KeyPoint kpUn;
+                // 总数N = 相机1所有特征点数量+相机2所有特征点数量
+                if (i < pFrame->Nleft)
+                {  // Left camera observation
+                    kpUn = pFrame->mvKeys[i];
 
-                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
-                        e->setMeasurement(obs);
-                        const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
-                        e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+                    pFrame->mvbOutlier[i] = false;
 
-                        g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                        e->setRobustKernel(rk);
-                        rk->setDelta(deltaMono);
+                    Eigen::Matrix<double, 2, 1> obs;
+                    obs << kpUn.pt.x, kpUn.pt.y;
 
-                        e->pCamera = pFrame->mpCamera2;
-                        e->Xw      = pMP->GetWorldPos().cast<double>();
+                    ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose* e = new ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose();
 
-                        e->mTrl = g2o::SE3Quat(pFrame->GetRelativePoseTrl().unit_quaternion().cast<double>(),
-                                               pFrame->GetRelativePoseTrl().translation().cast<double>());
+                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
+                    e->setMeasurement(obs);
+                    const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
+                    e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
 
-                        optimizer.addEdge(e);
+                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                    e->setRobustKernel(rk);
+                    rk->setDelta(deltaMono);
 
-                        vpEdgesMono_FHR.push_back(e);
-                        vnIndexEdgeRight.push_back(i);
-                    }
+                    e->pCamera = pFrame->mpCamera;
+                    e->Xw      = pMP->GetWorldPos().cast<double>();
+
+                    optimizer.addEdge(e);
+
+                    vpEdgesMono.push_back(e);
+                    vnIndexEdgeMono.push_back(i);
+                }
+                else
+                {  // Right camera observation
+                    kpUn = pFrame->mvKeysRight[i - pFrame->Nleft];
+
+                    Eigen::Matrix<double, 2, 1> obs;
+                    obs << kpUn.pt.x, kpUn.pt.y;
+
+                    pFrame->mvbOutlier[i] = false;
+
+                    ORB_SLAM3::EdgeSE3ProjectXYZOnlyPoseToBody* e = new ORB_SLAM3::EdgeSE3ProjectXYZOnlyPoseToBody();
+
+                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
+                    e->setMeasurement(obs);
+                    const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
+                    e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+
+                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                    e->setRobustKernel(rk);
+                    rk->setDelta(deltaMono);
+
+                    e->pCamera = pFrame->mpCamera2;
+                    e->Xw      = pMP->GetWorldPos().cast<double>();
+
+                    e->mTrl = g2o::SE3Quat(pFrame->GetRelativePoseTrl().unit_quaternion().cast<double>(),
+                                           pFrame->GetRelativePoseTrl().translation().cast<double>());
+
+                    optimizer.addEdge(e);
+
+                    vpEdgesMono_FHR.push_back(e);
+                    vnIndexEdgeRight.push_back(i);
                 }
             }
         }
     }
     // 如果没有足够的匹配点,那么就只好放弃了
-    // cout << "PO: vnIndexEdgeMono.size() = " << vnIndexEdgeMono.size() << "   vnIndexEdgeRight.size() = " <<
+    // LOG(INFO) << "PO: vnIndexEdgeMono.size() = " << vnIndexEdgeMono.size() << "   vnIndexEdgeRight.size() = " <<
     // vnIndexEdgeRight.size() << endl;
     if (nInitialCorrespondences < 3)
+    {
         return 0;
+    }
 
     // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
     // At the next optimization, outliers are not included, but at the end they can be classified as inliers again.
@@ -491,129 +494,134 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame* pFrame, bool bRecInit
         for (int i = 0; i < N; i++)
         {
             MapPoint* pMP = pFrame->mvpMapPoints[i];
-            if (pMP)
+            if (!pMP)
             {
-                cv::KeyPoint kpUn;
+                continue;
+            }
 
-                // Left monocular observation
-                // 这里说的Left monocular包含两种情况：1.单目情况 2.双目情况下的左目
-                if ((!bRight && pFrame->mvuRight[i] < 0) || i < Nleft)
+            cv::KeyPoint kpUn;
+            // Left monocular observation
+            // 这里说的Left monocular包含两种情况：1.单目情况 2.双目情况下的左目
+            if ((!bRight && pFrame->mvuRight[i] < 0) || i < Nleft)
+            {
+                // 如果是双目情况下的左目
+                if (i < Nleft)  // pair left-right
                 {
-                    // 如果是双目情况下的左目
-                    if (i < Nleft)  // pair left-right
-                        // 使用未畸变校正的特征点
-                        kpUn = pFrame->mvKeys[i];
-                    // 如果是单目
-                    else
-                        // 使用畸变校正过的特征点
-                        kpUn = pFrame->mvKeysUn[i];
-
-                    // 单目地图点计数增加
-                    nInitialMonoCorrespondences++;
-                    // 当前地图点默认设置为不是外点
-                    pFrame->mvbOutlier[i] = false;
-
-                    Eigen::Matrix<double, 2, 1> obs;
-                    obs << kpUn.pt.x, kpUn.pt.y;
-
-                    // 第一种边(视觉重投影约束)：地图点投影到该帧图像的坐标与特征点坐标偏差尽可能小
-                    EdgeMonoOnlyPose* e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 0);
-
-                    // 将位姿作为第一个顶点
-                    e->setVertex(0, VP);
-
-                    // 设置观测值，即去畸变后的像素坐标
-                    e->setMeasurement(obs);
-
-                    // Add here uncerteinty
-                    // 获取不确定度，这里调用uncertainty2返回固定值1.0
-                    // ?这里的1.0是作为缺省值的意思吗？是否可以根据对视觉信息的信任度动态修改这个值，比如标定的误差？
-                    const float unc2 = pFrame->mpCamera->uncertainty2(obs);
-
-                    // invSigma2 = (Inverse(协方差矩阵))^2，表明该约束在各个维度上的可信度
-                    //  图像金字塔层数越高，可信度越差
-                    const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave] / unc2;
-                    // 设置该约束的信息矩阵
-                    e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
-
-                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    // 设置鲁棒核函数，避免其误差的平方项出现数值过大的增长
-                    // 注：后续在优化2次后会用e->setRobustKernel(0)禁掉鲁棒核函数
-                    e->setRobustKernel(rk);
-
-                    // 重投影误差的自由度为2，设置对应的卡方阈值
-                    rk->setDelta(thHuberMono);
-
-                    // 将第一种边加入优化器
-                    optimizer.addEdge(e);
-
-                    // 将第一种边加入vpEdgesMono
-                    vpEdgesMono.push_back(e);
-                    // 将对应的特征点索引加入vnIndexEdgeMono
-                    vnIndexEdgeMono.push_back(i);
+                    // 使用未畸变校正的特征点
+                    kpUn = pFrame->mvKeys[i];
                 }
-                // Stereo observation
-                else if (!bRight)
+                // 如果是单目
+                else
                 {
-                    nInitialStereoCorrespondences++;
-                    pFrame->mvbOutlier[i] = false;
-
-                    kpUn                              = pFrame->mvKeysUn[i];
-                    const float                 kp_ur = pFrame->mvuRight[i];
-                    Eigen::Matrix<double, 3, 1> obs;
-                    obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-
-                    EdgeStereoOnlyPose* e = new EdgeStereoOnlyPose(pMP->GetWorldPos());
-
-                    e->setVertex(0, VP);
-                    e->setMeasurement(obs);
-
-                    // Add here uncerteinty
-                    const float unc2 = pFrame->mpCamera->uncertainty2(obs.head(2));
-
-                    const float& invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave] / unc2;
-                    e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
-
-                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    e->setRobustKernel(rk);
-                    rk->setDelta(thHuberStereo);
-
-                    optimizer.addEdge(e);
-
-                    vpEdgesStereo.push_back(e);
-                    vnIndexEdgeStereo.push_back(i);
+                    // 使用畸变校正过的特征点
+                    kpUn = pFrame->mvKeysUn[i];
                 }
 
-                // Right monocular observation
-                if (bRight && i >= Nleft)
-                {
-                    nInitialMonoCorrespondences++;
-                    pFrame->mvbOutlier[i] = false;
+                // 单目地图点计数增加
+                nInitialMonoCorrespondences++;
+                // 当前地图点默认设置为不是外点
+                pFrame->mvbOutlier[i] = false;
 
-                    kpUn = pFrame->mvKeysRight[i - Nleft];
-                    Eigen::Matrix<double, 2, 1> obs;
-                    obs << kpUn.pt.x, kpUn.pt.y;
+                Eigen::Matrix<double, 2, 1> obs;
+                obs << kpUn.pt.x, kpUn.pt.y;
 
-                    EdgeMonoOnlyPose* e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 1);
+                // 第一种边(视觉重投影约束)：地图点投影到该帧图像的坐标与特征点坐标偏差尽可能小
+                EdgeMonoOnlyPose* e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 0);
 
-                    e->setVertex(0, VP);
-                    e->setMeasurement(obs);
+                // 将位姿作为第一个顶点
+                e->setVertex(0, VP);
 
-                    // Add here uncerteinty
-                    const float unc2 = pFrame->mpCamera->uncertainty2(obs);
+                // 设置观测值，即去畸变后的像素坐标
+                e->setMeasurement(obs);
 
-                    const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave] / unc2;
-                    e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+                // Add here uncerteinty
+                // 获取不确定度，这里调用uncertainty2返回固定值1.0
+                // ?这里的1.0是作为缺省值的意思吗？是否可以根据对视觉信息的信任度动态修改这个值，比如标定的误差？
+                const float unc2 = pFrame->mpCamera->uncertainty2(obs);
 
-                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    e->setRobustKernel(rk);
-                    rk->setDelta(thHuberMono);
+                // invSigma2 = (Inverse(协方差矩阵))^2，表明该约束在各个维度上的可信度
+                //  图像金字塔层数越高，可信度越差
+                const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave] / unc2;
+                // 设置该约束的信息矩阵
+                e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
 
-                    optimizer.addEdge(e);
+                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                // 设置鲁棒核函数，避免其误差的平方项出现数值过大的增长
+                // 注：后续在优化2次后会用e->setRobustKernel(0)禁掉鲁棒核函数
+                e->setRobustKernel(rk);
 
-                    vpEdgesMono.push_back(e);
-                    vnIndexEdgeMono.push_back(i);
-                }
+                // 重投影误差的自由度为2，设置对应的卡方阈值
+                rk->setDelta(thHuberMono);
+
+                // 将第一种边加入优化器
+                optimizer.addEdge(e);
+
+                // 将第一种边加入vpEdgesMono
+                vpEdgesMono.push_back(e);
+                // 将对应的特征点索引加入vnIndexEdgeMono
+                vnIndexEdgeMono.push_back(i);
+            }
+            // Stereo observation
+            else if (!bRight)
+            {
+                nInitialStereoCorrespondences++;
+                pFrame->mvbOutlier[i] = false;
+
+                kpUn                              = pFrame->mvKeysUn[i];
+                const float                 kp_ur = pFrame->mvuRight[i];
+                Eigen::Matrix<double, 3, 1> obs;
+                obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+
+                EdgeStereoOnlyPose* e = new EdgeStereoOnlyPose(pMP->GetWorldPos());
+
+                e->setVertex(0, VP);
+                e->setMeasurement(obs);
+
+                // Add here uncerteinty
+                const float unc2 = pFrame->mpCamera->uncertainty2(obs.head(2));
+
+                const float& invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave] / unc2;
+                e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
+
+                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                e->setRobustKernel(rk);
+                rk->setDelta(thHuberStereo);
+
+                optimizer.addEdge(e);
+
+                vpEdgesStereo.push_back(e);
+                vnIndexEdgeStereo.push_back(i);
+            }
+
+            // Right monocular observation
+            if (bRight && i >= Nleft)
+            {
+                nInitialMonoCorrespondences++;
+                pFrame->mvbOutlier[i] = false;
+
+                kpUn = pFrame->mvKeysRight[i - Nleft];
+                Eigen::Matrix<double, 2, 1> obs;
+                obs << kpUn.pt.x, kpUn.pt.y;
+
+                EdgeMonoOnlyPose* e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 1);
+
+                e->setVertex(0, VP);
+                e->setMeasurement(obs);
+
+                // Add here uncerteinty
+                const float unc2 = pFrame->mpCamera->uncertainty2(obs);
+
+                const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave] / unc2;
+                e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+
+                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                e->setRobustKernel(rk);
+                rk->setDelta(thHuberMono);
+
+                optimizer.addEdge(e);
+
+                vpEdgesMono.push_back(e);
+                vnIndexEdgeMono.push_back(i);
             }
         }
     }
@@ -819,7 +827,7 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame* pFrame, bool bRecInit
 
         if (optimizer.edges().size() < 10)
         {
-            cout << "PIOLKF: NOT ENOUGH EDGES" << endl;
+            LOG(INFO) << "PIOLKF: NOT ENOUGH EDGES" << endl;
             break;
         }
     }
@@ -906,12 +914,12 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame* pFrame, bool bRecInit
     //  ei ei ei ei ei ei ei ei ei   0      0     0    0     0    0
     //  ei ei ei ei ei ei ei ei ei   0      0     0    0     0    0
     //  ei ei ei ei ei ei ei ei ei   0      0     0    0     0    0
-    //  0  0  0  0  0  0  0   0  0  egr egr egr  0     0     0
-    //  0  0  0  0  0  0  0   0  0  egr egr egr  0     0     0
-    //  0  0  0  0  0  0  0   0  0  egr egr egr  0     0     0
-    //  0  0  0  0  0  0  0   0  0    0     0      0  ear ear ear
-    //  0  0  0  0  0  0  0   0  0    0     0      0  ear ear ear
-    //  0  0  0  0  0  0  0   0  0    0     0      0  ear ear ear
+    //  0  0  0  0  0  0  0   0  0  egr    egr   egr   0     0    0
+    //  0  0  0  0  0  0  0   0  0  egr    egr   egr   0     0    0
+    //  0  0  0  0  0  0  0   0  0  egr    egr   egr   0     0    0
+    //  0  0  0  0  0  0  0   0  0    0     0     0  ear   ear  ear
+    //  0  0  0  0  0  0  0   0  0    0     0     0  ear   ear  ear
+    //  0  0  0  0  0  0  0   0  0    0     0     0  ear   ear  ear
 
     int tot_in = 0, tot_out = 0;
     for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++)
@@ -926,7 +934,9 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame* pFrame, bool bRecInit
             tot_in++;
         }
         else
+        {
             tot_out++;
+        }
     }
 
     for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++)
@@ -946,21 +956,21 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame* pFrame, bool bRecInit
 
     // 设eie = ei->GetHessian2()+∑(e->GetHessian())
     // 则最终Hessian Matrix长这样
-    // eie eie eie eie eie eie         ei ei ei   0      0     0    0     0    0
-    // eie eie eie eie eie eie         ei ei ei   0      0     0    0     0    0
-    // eie eie eie eie eie eie         ei ei ei   0      0     0    0     0    0
-    // eie eie eie eie eie eie         ei ei ei   0      0     0    0     0    0
-    // eie eie eie eie eie eie         ei ei ei   0      0     0    0     0    0
-    // eie eie eie eie eie eie         ei ei ei   0      0     0    0     0    0
-    // ei    ei    ei    ei   ei   ei  ei ei ei   0      0     0    0     0    0
-    // ei    ei    ei    ei   ei   ei  ei ei ei   0      0     0    0     0    0
-    // ei    ei    ei    ei   ei   ei  ei ei ei   0      0     0    0     0    0
-    //  0     0     0     0     0    0   0   0  0  egr egr egr  0     0     0
-    //  0     0     0     0     0    0   0   0  0  egr egr egr  0     0     0
-    //  0     0     0     0     0    0   0   0  0  egr egr egr  0     0     0
-    //  0     0     0     0     0    0   0   0  0    0     0      0  ear ear ear
-    //  0     0     0     0     0    0   0   0  0    0     0      0  ear ear ear
-    //  0     0     0     0     0    0   0   0  0    0     0      0  ear ear ear
+    // eie eie eie eie eie eie ei ei ei   0    0     0    0     0    0
+    // eie eie eie eie eie eie ei ei ei   0    0     0    0     0    0
+    // eie eie eie eie eie eie ei ei ei   0    0     0    0     0    0
+    // eie eie eie eie eie eie ei ei ei   0    0     0    0     0    0
+    // eie eie eie eie eie eie ei ei ei   0    0     0    0     0    0
+    // eie eie eie eie eie eie ei ei ei   0    0     0    0     0    0
+    // ei  ei  ei  ei  ei  ei  ei ei ei   0    0     0    0     0    0
+    // ei  ei  ei  ei  ei  ei  ei ei ei   0    0     0    0     0    0
+    // ei  ei  ei  ei  ei  ei  ei ei ei   0    0     0    0     0    0
+    // 0   0   0   0   0   0   0  0  0  egr  egr   egr    0     0    0
+    // 0   0   0   0   0   0   0  0  0  egr  egr   egr    0     0    0
+    // 0   0   0   0   0   0   0  0  0  egr  egr   egr    0     0    0
+    // 0   0   0   0   0   0   0  0  0    0    0     0    ear  ear  ear
+    // 0   0   0   0   0   0   0  0  0    0    0     0    ear  ear  ear
+    // 0   0   0   0   0   0   0  0  0    0    0     0    ear  ear  ear
 
     // 构造一个ConstraintPoseImu对象，为下一帧提供先验约束
     // 构造对象所使用的参数是当前帧P、V、BG、BA的估计值和H矩阵
@@ -1061,127 +1071,133 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit)
         for (int i = 0; i < N; i++)
         {
             MapPoint* pMP = pFrame->mvpMapPoints[i];
-            if (pMP)
+            if (!pMP)
             {
-                cv::KeyPoint kpUn;
-                // Left monocular observation
-                // 这里说的Left monocular包含两种情况：1.单目情况 2.双目情况下的左目
-                if ((!bRight && pFrame->mvuRight[i] < 0) || i < Nleft)
+                continue;
+            }
+
+            cv::KeyPoint kpUn;
+            // Left monocular observation
+            // 这里说的Left monocular包含两种情况：1.单目情况 2.双目情况下的左目
+            if ((!bRight && pFrame->mvuRight[i] < 0) || i < Nleft)
+            {
+                // 如果是双目情况下的左目
+                if (i < Nleft)  // pair left-right
                 {
-                    // 如果是双目情况下的左目
-                    if (i < Nleft)  // pair left-right
-                        // 使用未畸变校正的特征点
-                        kpUn = pFrame->mvKeys[i];
-                    // 如果是单目
-                    else
-                        // 使用畸变校正过的特征点
-                        kpUn = pFrame->mvKeysUn[i];
-
-                    // 单目地图点计数增加
-                    nInitialMonoCorrespondences++;
-                    // 当前地图点默认设置为不是外点
-                    pFrame->mvbOutlier[i] = false;
-                    // 观测的特征点
-                    Eigen::Matrix<double, 2, 1> obs;
-                    obs << kpUn.pt.x, kpUn.pt.y;
-
-                    // 第一种边(视觉重投影约束)：地图点投影到该帧图像的坐标与特征点坐标偏差尽可能小
-                    EdgeMonoOnlyPose* e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 0);
-
-                    // 将位姿作为第一个顶点
-                    e->setVertex(0, VP);
-
-                    // 设置观测值，即去畸变后的像素坐标
-                    e->setMeasurement(obs);
-
-                    // Add here uncerteinty
-                    // 获取不确定度，这里调用uncertainty2返回固定值1.0
-                    // ?这里返回1.0是作为缺省值，是否可以根据对视觉信息的信任度动态修改这个值，比如标定的误差？
-                    const float unc2 = pFrame->mpCamera->uncertainty2(obs);
-
-                    // invSigma2 = (Inverse(协方差矩阵))^2，表明该约束在各个维度上的可信度
-                    //  图像金字塔层数越高，可信度越差
-                    const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave] / unc2;
-                    // 设置该约束的信息矩阵
-                    e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
-
-                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    // 设置鲁棒核函数，避免其误差的平方项出现数值过大的增长
-                    // 注：后续在优化2次后会用e->setRobustKernel(0)禁掉鲁棒核函数
-                    e->setRobustKernel(rk);
-                    // 重投影误差的自由度为2，设置对应的卡方阈值
-                    rk->setDelta(thHuberMono);
-
-                    // 将第一种边加入优化器
-                    optimizer.addEdge(e);
-
-                    // 将第一种边加入vpEdgesMono
-                    vpEdgesMono.push_back(e);
-                    // 将对应的特征点索引加入vnIndexEdgeMono
-                    vnIndexEdgeMono.push_back(i);
+                    // 使用未畸变校正的特征点
+                    kpUn = pFrame->mvKeys[i];
                 }
-                // Stereo observation
-                else if (!bRight)
+                // 如果是单目
+                else
                 {
-                    nInitialStereoCorrespondences++;
-                    pFrame->mvbOutlier[i] = false;
-
-                    kpUn                              = pFrame->mvKeysUn[i];
-                    const float                 kp_ur = pFrame->mvuRight[i];
-                    Eigen::Matrix<double, 3, 1> obs;
-                    obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-
-                    EdgeStereoOnlyPose* e = new EdgeStereoOnlyPose(pMP->GetWorldPos());
-
-                    e->setVertex(0, VP);
-                    e->setMeasurement(obs);
-
-                    // Add here uncerteinty
-                    const float unc2 = pFrame->mpCamera->uncertainty2(obs.head(2));
-
-                    const float& invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave] / unc2;
-                    e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
-
-                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    e->setRobustKernel(rk);
-                    rk->setDelta(thHuberStereo);
-
-                    optimizer.addEdge(e);
-
-                    vpEdgesStereo.push_back(e);
-                    vnIndexEdgeStereo.push_back(i);
+                    // 使用畸变校正过的特征点
+                    kpUn = pFrame->mvKeysUn[i];
                 }
 
-                // Right monocular observation
-                if (bRight && i >= Nleft)
-                {
-                    nInitialMonoCorrespondences++;
-                    pFrame->mvbOutlier[i] = false;
+                // 单目地图点计数增加
+                nInitialMonoCorrespondences++;
+                // 当前地图点默认设置为不是外点
+                pFrame->mvbOutlier[i] = false;
+                // 观测的特征点
+                Eigen::Matrix<double, 2, 1> obs;
+                obs << kpUn.pt.x, kpUn.pt.y;
 
-                    kpUn = pFrame->mvKeysRight[i - Nleft];
-                    Eigen::Matrix<double, 2, 1> obs;
-                    obs << kpUn.pt.x, kpUn.pt.y;
+                // 第一种边(视觉重投影约束)：地图点投影到该帧图像的坐标与特征点坐标偏差尽可能小
+                EdgeMonoOnlyPose* e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 0);
 
-                    EdgeMonoOnlyPose* e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 1);
+                // 将位姿作为第一个顶点
+                e->setVertex(0, VP);
 
-                    e->setVertex(0, VP);
-                    e->setMeasurement(obs);
+                // 设置观测值，即去畸变后的像素坐标
+                e->setMeasurement(obs);
 
-                    // Add here uncerteinty
-                    const float unc2 = pFrame->mpCamera->uncertainty2(obs);
+                // Add here uncerteinty
+                // 获取不确定度，这里调用uncertainty2返回固定值1.0
+                // ?这里返回1.0是作为缺省值，是否可以根据对视觉信息的信任度动态修改这个值，比如标定的误差？
+                const float unc2 = pFrame->mpCamera->uncertainty2(obs);
 
-                    const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave] / unc2;
-                    e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+                // invSigma2 = (Inverse(协方差矩阵))^2，表明该约束在各个维度上的可信度
+                //  图像金字塔层数越高，可信度越差
+                const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave] / unc2;
+                // 设置该约束的信息矩阵
+                e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
 
-                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    e->setRobustKernel(rk);
-                    rk->setDelta(thHuberMono);
+                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                // 设置鲁棒核函数，避免其误差的平方项出现数值过大的增长
+                // 注：后续在优化2次后会用e->setRobustKernel(0)禁掉鲁棒核函数
+                e->setRobustKernel(rk);
+                // 重投影误差的自由度为2，设置对应的卡方阈值
+                rk->setDelta(thHuberMono);
 
-                    optimizer.addEdge(e);
+                // 将第一种边加入优化器
+                optimizer.addEdge(e);
 
-                    vpEdgesMono.push_back(e);
-                    vnIndexEdgeMono.push_back(i);
-                }
+                // 将第一种边加入vpEdgesMono
+                vpEdgesMono.push_back(e);
+                // 将对应的特征点索引加入vnIndexEdgeMono
+                vnIndexEdgeMono.push_back(i);
+            }
+            // Stereo observation
+            else if (!bRight)
+            {
+                nInitialStereoCorrespondences++;
+                pFrame->mvbOutlier[i] = false;
+
+                kpUn                              = pFrame->mvKeysUn[i];
+                const float                 kp_ur = pFrame->mvuRight[i];
+                Eigen::Matrix<double, 3, 1> obs;
+                obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+
+                EdgeStereoOnlyPose* e = new EdgeStereoOnlyPose(pMP->GetWorldPos());
+
+                e->setVertex(0, VP);
+                e->setMeasurement(obs);
+
+                // Add here uncerteinty
+                const float unc2 = pFrame->mpCamera->uncertainty2(obs.head(2));
+
+                const float& invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave] / unc2;
+                e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
+
+                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                e->setRobustKernel(rk);
+                rk->setDelta(thHuberStereo);
+
+                optimizer.addEdge(e);
+
+                vpEdgesStereo.push_back(e);
+                vnIndexEdgeStereo.push_back(i);
+            }
+
+            // Right monocular observation
+            if (bRight && i >= Nleft)
+            {
+                nInitialMonoCorrespondences++;
+                pFrame->mvbOutlier[i] = false;
+
+                kpUn = pFrame->mvKeysRight[i - Nleft];
+                Eigen::Matrix<double, 2, 1> obs;
+                obs << kpUn.pt.x, kpUn.pt.y;
+
+                EdgeMonoOnlyPose* e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 1);
+
+                e->setVertex(0, VP);
+                e->setMeasurement(obs);
+
+                // Add here uncerteinty
+                const float unc2 = pFrame->mpCamera->uncertainty2(obs);
+
+                const float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave] / unc2;
+                e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+
+                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                e->setRobustKernel(rk);
+                rk->setDelta(thHuberMono);
+
+                optimizer.addEdge(e);
+
+                vpEdgesMono.push_back(e);
+                vnIndexEdgeMono.push_back(i);
             }
         }
     }
@@ -1256,8 +1272,9 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit)
 
     // ?既然有判空的操作，可以区分一下有先验信息（五条边）和无先验信息（四条边）的情况
     if (!pFp->mpcpi)
-        Verbose::PrintMess("pFp->mpcpi does not exist!!!\nPrevious Frame " + to_string(pFp->mnId),
-                           Verbose::VERBOSITY_NORMAL);
+    {
+        LOG(INFO) << "pFp->mpcpi does not exist!!!\nPrevious Frame " + to_string(pFp->mnId);
+    }
 
     // 第五种边（先验约束）：上一帧信息随优化的改变量要尽可能小
     EdgePriorPoseImu* ep = new EdgePriorPoseImu(pFp->mpcpi);
@@ -1405,7 +1422,7 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit)
 
         if (optimizer.edges().size() < 10)
         {
-            cout << "PIOLF: NOT ENOUGH EDGES" << endl;
+            LOG(INFO) << "PIOLF: NOT ENOUGH EDGES" << endl;
             break;
         }
     }
@@ -1513,10 +1530,10 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit)
     H.block<3, 3>(24, 24) += Hgr.block<3, 3>(3, 3);  // Jgr2.t * Jgr2
     // 经过这步H变成了
     // 列数 6            3                    3                      3            6           3             3         3
-    // -----------------------------------------------------------------------------------------------------------------
-    // 行数 Jp1.t * Jp1  Jp1.t * Jv1         Jp1.t * Jg1           Jp1.t * Ja1  Jp1.t * Jp2  Jp1.t * Jv2        0 0 |  6
-    // Jv1.t * Jp1  Jv1.t * Jv1         Jv1.t * Jg1           Jv1.t * Ja1  Jv1.t * Jp2  Jv1.t * Jv2        0         0 |
-    // 3 Jg1.t * Jp1  Jg1.t * Jv1  Jg1.t * Jg1 + Jgr1.t * Jgr1  Jg1.t * Ja1  Jg1.t * Jp2  Jg1.t * Jv2  Jgr1.t * Jgr2   0
+    // ------------------------------------------------------------------------------------------------------------ 行数
+    // Jp1.t * Jp1  Jp1.t * Jv1         Jp1.t * Jg1           Jp1.t * Ja1  Jp1.t * Jp2  Jp1.t * Jv2        0  0 |  6
+    // Jv1.t * Jp1  Jv1.t * Jv1         Jv1.t * Jg1           Jv1.t * Ja1  Jv1.t * Jp2  Jv1.t * Jv2        0 0 | 3
+    // Jg1.t * Jp1  Jg1.t * Jv1  Jg1.t * Jg1 + Jgr1.t * Jgr1  Jg1.t * Ja1  Jg1.t * Jp2  Jg1.t * Jv2  Jgr1.t * Jgr2   0
     // |  3 Ja1.t * Jp1  Ja1.t * Jv1         Ja1.t * Jg1           Ja1.t * Ja1  Ja1.t * Jp2  Ja1.t * Jv2        0 0 |  3
     // Jp2.t * Jp1  Jp2.t * Jv1         Jp2.t * Jg1           Jp2.t * Ja1  Jp2.t * Jp2  Jp2.t * Jv2        0         0 |
     // 6 Jv2.t * Jp1  Jv2.t * Jv1         Jv2.t * Jg1           Jv2.t * Ja1  Jv2.t * Jp2  Jv2.t * Jv2        0         0
@@ -1868,7 +1885,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
 
     if (num_fixedKF == 0)
     {
-        Verbose::PrintMess("LM-LBA: There are 0 fixed KF in the optimizations, LBA aborted", Verbose::VERBOSITY_NORMAL);
+        LOG(INFO) << "LM-LBA: There are 0 fixed KF in the optimizations, LBA aborted";
         return;
     }
 
@@ -2455,7 +2472,7 @@ void Optimizer::LocalInertialBA(KeyFrame* pKF, bool* pbStopFlag, Map* pMap, int&
 
         if (!pKFi->mPrevKF)
         {
-            cout << "NOT INERTIAL LINK TO PREVIOUS FRAME!!!!" << endl;
+            LOG(INFO) << "NOT INERTIAL LINK TO PREVIOUS FRAME!!!!" << endl;
             continue;
         }
         if (pKFi->bImu && pKFi->mPrevKF->bImu && pKFi->mpImuPreintegrated)
@@ -2519,7 +2536,7 @@ void Optimizer::LocalInertialBA(KeyFrame* pKF, bool* pbStopFlag, Map* pMap, int&
             optimizer.addEdge(vear[i]);
         }
         else
-            cout << "ERROR building inertial edge" << endl;
+            LOG(INFO) << "ERROR building inertial edge" << endl;
     }
 
     // Set MapPoint vertices
@@ -2693,7 +2710,7 @@ void Optimizer::LocalInertialBA(KeyFrame* pKF, bool* pbStopFlag, Map* pMap, int&
         }
     }
 
-    // cout << "Total map points: " << lLocalMapPoints.size() << endl;
+    // LOG(INFO) << "Total map points: " << lLocalMapPoints.size() << endl;
     //  TODO debug会报错先注释掉
     for (map<int, int>::iterator mit = mVisEdges.begin(), mend = mVisEdges.end(); mit != mend; mit++)
     {
@@ -2754,7 +2771,7 @@ void Optimizer::LocalInertialBA(KeyFrame* pKF, bool* pbStopFlag, Map* pMap, int&
     // TODO: Some convergence problems have been detected here
     if ((2 * err < err_end || isnan(err) || isnan(err_end)) && !bLarge)  // bGN)
     {
-        cout << "FAIL LOCAL-INERTIAL BA!!!!" << endl;
+        LOG(INFO) << "FAIL LOCAL-INERTIAL BA!!!!" << endl;
         return;
     }
 
@@ -3122,7 +3139,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame*>& vpKFs, const vector<Ma
     optimizer.setVerbose(false);
     optimizer.initializeOptimization();
     optimizer.optimize(nIterations);
-    Verbose::PrintMess("BA: End of the optimization", Verbose::VERBOSITY_NORMAL);
+    LOG(INFO) << "BundleAdjustment --- End of the optimization";
 
     // Recover optimized data
     // Step 5：得到优化的结果
@@ -3357,7 +3374,7 @@ void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const l
         // 必须有对应的上一个关键帧，感觉跟下面的判定冲突了
         if (!pKFi->mPrevKF)
         {
-            Verbose::PrintMess("NOT INERTIAL LINK TO PREVIOUS FRAME!", Verbose::VERBOSITY_NORMAL);
+            LOG(INFO) << "NOT INERTIAL LINK TO PREVIOUS FRAME!";
             continue;
         }
 
@@ -3399,8 +3416,8 @@ void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const l
                 {
                     if (!VP1 || !VV1 || !VG1 || !VA1 || !VP2 || !VV2 || !VG2 || !VA2)
                     {
-                        cout << "Error" << VP1 << ", " << VV1 << ", " << VG1 << ", " << VA1 << ", " << VP2 << ", "
-                             << VV2 << ", " << VG2 << ", " << VA2 << endl;
+                        LOG(INFO) << "Error" << VP1 << ", " << VV1 << ", " << VG1 << ", " << VA1 << ", " << VP2 << ", "
+                                  << VV2 << ", " << VG2 << ", " << VA2 << endl;
                         continue;
                     }
                 }
@@ -3408,8 +3425,8 @@ void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const l
                 {
                     if (!VP1 || !VV1 || !VG1 || !VA1 || !VP2 || !VV2)
                     {
-                        cout << "Error" << VP1 << ", " << VV1 << ", " << VG1 << ", " << VA1 << ", " << VP2 << ", "
-                             << VV2 << endl;
+                        LOG(INFO) << "Error" << VP1 << ", " << VV1 << ", " << VG1 << ", " << VA1 << ", " << VP2 << ", "
+                                  << VV2 << endl;
                         continue;
                     }
                 }
@@ -3449,7 +3466,7 @@ void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const l
                 }
             }
             else
-                cout << pKFi->mnId << " or " << pKFi->mPrevKF->mnId << " no imu" << endl;
+                LOG(INFO) << pKFi->mnId << " or " << pKFi->mPrevKF->mnId << " no imu" << endl;
         }
     }
 
@@ -3723,7 +3740,7 @@ void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg, double& sc
                                      Eigen::Vector3d& ba, bool bMono, Eigen::MatrixXd& covInertial, bool bFixedVel,
                                      bool bGauss, float priorG, float priorA)
 {
-    Verbose::PrintMess("inertial optimization", Verbose::VERBOSITY_NORMAL);
+    LOG(INFO) << "inertial optimization";
     int                     its     = 200;
     long unsigned int       maxKFid = pMap->GetMaxKFid();
     const vector<KeyFrame*> vpKFs   = pMap->GetAllKeyFrames();  // 获取所有关键帧
@@ -3819,7 +3836,7 @@ void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg, double& sc
     vpei.reserve(vpKFs.size());
     vector<pair<KeyFrame*, KeyFrame*>> vppUsedKF;
     vppUsedKF.reserve(vpKFs.size());  // 后面虽然加入了关键帧，但是没有用到，应该调试用的
-    // std::cout << "build optimization graph" << std::endl;
+    // LOG(INFO) << "build optimization graph" << std::endl;
 
     for (size_t i = 0; i < vpKFs.size(); i++)
     {
@@ -3830,7 +3847,7 @@ void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg, double& sc
             if (pKFi->isBad() || pKFi->mPrevKF->mnId > maxKFid)
                 continue;
             if (!pKFi->mpImuPreintegrated)
-                std::cout << "Not preintegrated measurement" << std::endl;
+                LOG(INFO) << "Not preintegrated measurement" << std::endl;
             // 到这里的条件是pKFi是好的，并且它有上一个关键帧，且他们的id要小于最大id
             // 6.1 检查节点指针是否为空
             // 将pKFi偏置设定为上一关键帧的偏置
@@ -3845,8 +3862,8 @@ void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg, double& sc
             g2o::HyperGraph::Vertex* VS    = optimizer.vertex(maxKFid * 2 + 5);
             if (!VP1 || !VV1 || !VG || !VA || !VP2 || !VV2 || !VGDir || !VS)
             {
-                cout << "Error" << VP1 << ", " << VV1 << ", " << VG << ", " << VA << ", " << VP2 << ", " << VV2 << ", "
-                     << VGDir << ", " << VS << endl;
+                LOG(INFO) << "Error" << VP1 << ", " << VV1 << ", " << VG << ", " << VA << ", " << VP2 << ", " << VV2
+                          << ", " << VGDir << ", " << VS << endl;
 
                 continue;
             }
@@ -4030,8 +4047,8 @@ void Optimizer::InertialOptimization(Map* pMap, Eigen::Vector3d& bg, Eigen::Vect
             g2o::HyperGraph::Vertex* VS    = optimizer.vertex(maxKFid * 2 + 5);
             if (!VP1 || !VV1 || !VG || !VA || !VP2 || !VV2 || !VGDir || !VS)
             {
-                cout << "Error" << VP1 << ", " << VV1 << ", " << VG << ", " << VA << ", " << VP2 << ", " << VV2 << ", "
-                     << VGDir << ", " << VS << endl;
+                LOG(INFO) << "Error" << VP1 << ", " << VV1 << ", " << VG << ", " << VA << ", " << VP2 << ", " << VV2
+                          << ", " << VGDir << ", " << VS << endl;
 
                 continue;
             }
@@ -4179,11 +4196,9 @@ void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg, double& sc
             g2o::HyperGraph::Vertex* VS    = optimizer.vertex(4 * (maxKFid + 1) + 1);
             if (!VP1 || !VV1 || !VG || !VA || !VP2 || !VV2 || !VGDir || !VS)
             {
-                Verbose::PrintMess("Error" + to_string(VP1->id()) + ", " + to_string(VV1->id()) + ", " +
-                                       to_string(VG->id()) + ", " + to_string(VA->id()) + ", " + to_string(VP2->id()) +
-                                       ", " + to_string(VV2->id()) + ", " + to_string(VGDir->id()) + ", " +
-                                       to_string(VS->id()),
-                                   Verbose::VERBOSITY_NORMAL);
+                LOG(INFO) << "Error" + to_string(VP1->id()) + ", " + to_string(VV1->id()) + ", " + to_string(VG->id()) +
+                                 ", " + to_string(VA->id()) + ", " + to_string(VP2->id()) + ", " +
+                                 to_string(VV2->id()) + ", " + to_string(VGDir->id()) + ", " + to_string(VS->id());
 
                 continue;
             }
@@ -4360,14 +4375,13 @@ int Optimizer::OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, vector<MapPoint*>& v
 
         if (i2 < 0 && !bAllPoints)
         {
-            Verbose::PrintMess("    Remove point -> i2: " + to_string(i2) + "; bAllPoints: " + to_string(bAllPoints),
-                               Verbose::VERBOSITY_DEBUG);
+            LOG(INFO) << "    Remove point -> i2: " + to_string(i2) + "; bAllPoints: " + to_string(bAllPoints);
             continue;
         }
 
         if (P3D2c(2) < 0)
         {
-            Verbose::PrintMess("Sim3: Z coordinate is negative", Verbose::VERBOSITY_DEBUG);
+            LOG(INFO) << "Sim3: Z coordinate is negative";
             continue;
         }
 
@@ -5274,7 +5288,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF, vector<KeyFrame*> vpAdj
     {
         if (pKFi->isBad() || pKFi->GetMap() != pCurrentMap)
         {
-            Verbose::PrintMess("ERROR LBA: KF is bad or is not in the current map", Verbose::VERBOSITY_NORMAL);
+            LOG(INFO) << "ERROR LBA: KF is bad or is not in the current map";
             continue;
         }
 
@@ -5524,9 +5538,8 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF, vector<KeyFrame*> vpAdj
 
             e->setRobustKernel(0);
         }
-        Verbose::PrintMess("[BA]: First optimization(Huber), there are " + to_string(badMonoMP) + " monocular and " +
-                               to_string(badStereoMP) + " stereo bad edges",
-                           Verbose::VERBOSITY_DEBUG);
+        LOG(INFO) << "[BA]: First optimization(Huber), there are " + to_string(badMonoMP) + " monocular and " +
+                         to_string(badStereoMP) + " stereo bad edges";
 
         optimizer.initializeOptimization(0);
         optimizer.optimize(10);
@@ -5580,9 +5593,8 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF, vector<KeyFrame*> vpAdj
         }
     }
 
-    Verbose::PrintMess("[BA]: Second optimization, there are " + to_string(badMonoMP) + " monocular and " +
-                           to_string(badStereoMP) + " sterero bad edges",
-                       Verbose::VERBOSITY_DEBUG);
+    LOG(INFO) << "[BA]: Second optimization, there are " + to_string(badMonoMP) + " monocular and " +
+                     to_string(badStereoMP) + " sterero bad edges";
 
     // Get Map Mutex
     unique_lock<mutex> lock(pMainKF->GetMap()->mMutexMapUpdate);
@@ -5779,7 +5791,7 @@ void Optimizer::OptimizeEssentialGraph(KeyFrame* pCurKF, vector<KeyFrame*>& vpFi
         vpGoodPose[nIDi] = true;
         vpBadPose[nIDi]  = false;
     }
-    Verbose::PrintMess("Opt_Essential: vpFixedKFs loaded", Verbose::VERBOSITY_DEBUG);
+    LOG(INFO) << "Opt_Essential: vpFixedKFs loaded";
 
     set<unsigned long> sIdKF;
     // vpLocalCurrentWindowKFs 当前地图中经过矫正的关键帧
@@ -5994,8 +6006,7 @@ void Optimizer::OptimizeEssentialGraph(KeyFrame* pCurKF, vector<KeyFrame*>& vpFi
 
         if (num_connections == 0)
         {
-            Verbose::PrintMess("Opt_Essential: KF " + to_string(pKFi->mnId) + " has 0 connections",
-                               Verbose::VERBOSITY_DEBUG);
+            LOG(INFO) << "Opt_Essential: KF " + to_string(pKFi->mnId) + " has 0 connections";
         }
     }
 
@@ -6037,8 +6048,7 @@ void Optimizer::OptimizeEssentialGraph(KeyFrame* pCurKF, vector<KeyFrame*>& vpFi
         {
             if (!pRefKF)
             {
-                Verbose::PrintMess("MP " + to_string(pMPi->mnId) + " without a valid reference KF",
-                                   Verbose::VERBOSITY_DEBUG);
+                LOG(INFO) << "MP " + to_string(pMPi->mnId) + " without a valid reference KF";
                 break;
             }
 
@@ -6059,7 +6069,7 @@ void Optimizer::OptimizeEssentialGraph(KeyFrame* pCurKF, vector<KeyFrame*>& vpFi
         }
         else
         {
-            cout << "ERROR: MapPoint has a reference KF from another map" << endl;
+            LOG(INFO) << "ERROR: MapPoint has a reference KF from another map" << endl;
         }
     }
 }
@@ -6363,12 +6373,12 @@ void Optimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool* pbS
     // 6.1 第一阶段优化vpOptimizableKFs里面的帧，遍历所有可优化的关键帧
     for (int i = 0; i < N; i++)
     {
-        // cout << "inserting inertial edge " << i << endl;
+        // LOG(INFO) << "inserting inertial edge " << i << endl;
         KeyFrame* pKFi = vpOptimizableKFs[i];
 
         if (!pKFi->mPrevKF)
         {
-            Verbose::PrintMess("NOT INERTIAL LINK TO PREVIOUS FRAME!!!!", Verbose::VERBOSITY_NORMAL);
+            LOG(INFO) << "NOT INERTIAL LINK TO PREVIOUS FRAME!!!!";
             continue;
         }
         if (pKFi->bImu && pKFi->mPrevKF->bImu && pKFi->mpImuPreintegrated)
@@ -6431,10 +6441,10 @@ void Optimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool* pbS
             optimizer.addEdge(vear[i]);
         }
         else
-            Verbose::PrintMess("ERROR building inertial edge", Verbose::VERBOSITY_NORMAL);
+            LOG(INFO) << "ERROR building inertial edge";
     }
 
-    Verbose::PrintMess("end inserting inertial edges", Verbose::VERBOSITY_NORMAL);
+    LOG(INFO) << "end inserting inertial edges";
 
     // Set MapPoint vertices
     // 6.2 设置所有地图的顶点
