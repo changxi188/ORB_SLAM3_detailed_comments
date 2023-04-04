@@ -512,19 +512,20 @@ int KeyFrame::TrackedMapPoints(const int& minObs)
     for (int i = 0; i < N; i++)
     {
         MapPoint* pMP = mvpMapPoints[i];
-        if (pMP)
+        if (!pMP || pMP->isBad())
         {
-            if (!pMP->isBad())
-            {
-                if (bCheckObs)
-                {
-                    // 满足输入阈值要求的地图点计数加1
-                    if (mvpMapPoints[i]->Observations() >= minObs)
-                        nPoints++;
-                }
-                else
-                    nPoints++;
-            }
+            continue;
+        }
+
+        if (bCheckObs)
+        {
+            // 满足输入阈值要求的地图点计数加1
+            if (mvpMapPoints[i]->Observations() >= minObs)
+                nPoints++;
+        }
+        else
+        {
+            nPoints++;
         }
     }
 

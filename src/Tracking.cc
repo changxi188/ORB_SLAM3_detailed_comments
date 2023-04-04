@@ -1765,11 +1765,12 @@ void Tracking::GrabImuData(const IMU::Point& imuMeasurement)
  */
 void Tracking::PreintegrateIMU()
 {
+    LOG(INFO) << "PreintegrateIMU --- begin preintegrate imu";
     // Step 1.拿到两两帧之间待处理的预积分数据，组成一个集合
     // 上一帧不存在,说明两帧之间没有imu数据，不进行预积分
     if (!mCurrentFrame.mpPrevFrame)
     {
-        LOG(INFO) << "non prev frame ";
+        LOG(WARNING) << "PreintegrateIMU --- non prev frame ";
         mCurrentFrame.setIntegrated();
         return;
     }
@@ -1779,7 +1780,7 @@ void Tracking::PreintegrateIMU()
     // 没有imu数据,不进行预积分
     if (mlQueueImuData.size() == 0)
     {
-        LOG(INFO) << "Not IMU data in mlQueueImuData!!";
+        LOG(WARNING) << "PreintegrateIMU --- Not IMU data in mlQueueImuData!!";
         mCurrentFrame.setIntegrated();
         return;
     }
@@ -1828,7 +1829,7 @@ void Tracking::PreintegrateIMU()
     const int n = mvImuFromLastFrame.size() - 1;
     if (n == 0)
     {
-        LOG(INFO) << "Empty IMU measurements vector!!!\n";
+        LOG(WARNING) << "PreintegrateIMU --- Empty IMU measurements vector!!!\n";
         return;
     }
 
@@ -1899,7 +1900,9 @@ void Tracking::PreintegrateIMU()
         // Step 3.依次进行预积分计算
         // 应该是必存在的吧，一个是相对上一关键帧，一个是相对上一帧
         if (!mpImuPreintegratedFromLastKF)
-            LOG(INFO) << "mpImuPreintegratedFromLastKF does not exist" << endl;
+        {
+            LOG(ERROR) << "PreintegrateIMU --- mpImuPreintegratedFromLastKF does not exist" << endl;
+        }
         mpImuPreintegratedFromLastKF->IntegrateNewMeasurement(acc, angVel, tstep);
         pImuPreintegratedFromLastFrame->IntegrateNewMeasurement(acc, angVel, tstep);
     }
@@ -1911,7 +1914,7 @@ void Tracking::PreintegrateIMU()
 
     mCurrentFrame.setIntegrated();
 
-    // LOG(INFO)<<"Preintegration is finished!! "  ;
+    LOG(INFO) << "PreintegrateIMU --- Preintegration is finished!! ";
 }
 
 /**
@@ -1927,7 +1930,7 @@ bool Tracking::PredictStateIMU()
 {
     if (!mCurrentFrame.mpPrevFrame)
     {
-        LOG(INFO) << "No last frame";
+        LOG(WARNING) << "PredictStateIMU --- No last frame";
         return false;
     }
 
@@ -2013,7 +2016,7 @@ void Tracking::Track()
     LOG(INFO) << "Track --- begin track";
     if (bStepByStep)
     {
-        LOG(INFO) << "Tracking: Waiting to the next step" << std::endl;
+        LOG(INFO) << "Track --- Waiting to the next step" << std::endl;
         while (!mbStep && bStepByStep)
             usleep(500);
         mbStep = false;
@@ -2022,7 +2025,7 @@ void Tracking::Track()
     // Step 1 如局部建图里认为IMU有问题，重置当前活跃地图
     if (mpLocalMapper->mbBadImu)
     {
-        LOG(INFO) << "TRACK: Reset map because local mapper set the bad imu flag " << endl;
+        LOG(ERROR) << "Track --- Reset map because local mapper set the bad imu flag " << endl;
         mpSystem->ResetActiveMap();
         return;
     }
@@ -2031,7 +2034,7 @@ void Tracking::Track()
     Map* pCurrentMap = mpAtlas->GetCurrentMap();
     if (!pCurrentMap)
     {
-        LOG(INFO) << "ERROR: There is not an active map in the atlas" << endl;
+        LOG(ERROR) << "Track --- There is not an active map in the atlas" << endl;
     }
 
     // Step 2 处理时间戳异常的情况
@@ -2040,7 +2043,7 @@ void Tracking::Track()
         if (mLastFrame.mTimeStamp > mCurrentFrame.mTimeStamp)
         {
             // 如果当前图像时间戳比前一帧图像时间戳小，说明出错了，清除imu数据，创建新的子地图
-            LOG(ERROR) << "ERROR: Frame with a timestamp older than previous frame detected!" << endl;
+            LOG(ERROR) << "Track --- Frame with a timestamp older than previous frame detected!" << endl;
             unique_lock<mutex> lock(mMutexImuQueue);
             // mlQueueImuData.clear();
             // 创建新地图
@@ -2058,7 +2061,8 @@ void Tracking::Track()
                 // 如果当前地图imu成功初始化
                 if (mpAtlas->isImuInitialized())
                 {
-                    LOG(ERROR) << "Timestamp jump detected. State set to LOST. Reseting IMU integration..." << endl;
+                    LOG(ERROR) << "Track --- Timestamp jump detected. State set to LOST. Reseting IMU integration..."
+                               << endl;
                     // IMU完成第3次初始化（在localmapping线程里）
                     if (!pCurrentMap->GetIniertialBA2())
                     {
@@ -2074,7 +2078,7 @@ void Tracking::Track()
                 else
                 {
                     // 如果当前子图中imu还没有初始化，重置active地图
-                    LOG(ERROR) << "Timestamp jump detected, before IMU initialization. Reseting..." << endl;
+                    LOG(ERROR) << "Track --- Timestamp jump detected, before IMU initialization. Reseting..." << endl;
                     mpSystem->ResetActiveMap();
                 }
                 return;
@@ -2105,7 +2109,6 @@ void Tracking::Track()
         std::chrono::steady_clock::time_point time_StartPreIMU = std::chrono::steady_clock::now();
 #endif
         // IMU数据进行预积分
-        LOG(INFO) << "Track --- preintegrate IMU";
         PreintegrateIMU();
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_EndPreIMU = std::chrono::steady_clock::now();
@@ -2508,15 +2511,6 @@ void Tracking::Track()
             LOG(INFO) << "Track --- Track local map";
             bOK = TrackLocalMap();
         }
-
-        if (!bOK)
-        {
-            LOG(WARNING) << "Track --- Fail to track local map!";
-        }
-        else
-        {
-            LOG(INFO) << "Track --- Success track local map!";
-        }
     }
     else
     {
@@ -2562,7 +2556,7 @@ void Tracking::Track()
             if (!pCurrentMap->isImuInitialized() || !pCurrentMap->GetIniertialBA2())
             {
                 // IMU模式下IMU没有成功初始化或者没有完成IMU BA，则重置当前地图
-                LOG(WARNING) << "Track --- IMU is not or recently initialized. Reseting active map...";
+                LOG(ERROR) << "Track --- IMU is not or recently initialized. Reseting active map...";
                 mpSystem->ResetActiveMap();
             }
 
@@ -2674,7 +2668,6 @@ void Tracking::Track()
 #endif
         // 判断是否需要插入关键帧
         bool bNeedKF = NeedNewKeyFrame();
-        LOG(INFO) << "Track --- is need KF : " << bNeedKF;
 
         // Check if we need to insert a new keyframe
         // if(bNeedKF && bOK)
@@ -2687,7 +2680,6 @@ void Tracking::Track()
                                 (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO ||
                                  mSensor == System::IMU_RGBD))))
         {
-            LOG(INFO) << "Track --- Create new key frame";
             CreateNewKeyFrame();  // 创建关键帧，对于双目或RGB-D会产生新的地图点
         }
 
@@ -3606,10 +3598,10 @@ bool Tracking::TrackLocalMap()
     mTrackedFr++;
 
     // Step 1：更新局部关键帧 mvpLocalKeyFrames 和局部地图点 mvpLocalMapPoints
-    LOG(INFO) << "Track --- Update local map";
+    LOG(INFO) << "TrackLocalMap --- Update local map";
     UpdateLocalMap();
     // Step 2：筛选局部地图中新增的在视野范围内的地图点，投影到当前帧搜索匹配，得到更多的匹配关系
-    LOG(INFO) << "Track --- Search local points";
+    LOG(INFO) << "TrackLocalMap --- Search local points";
     SearchLocalPoints();
 
     // TOO check outliers before PO
@@ -3695,11 +3687,15 @@ bool Tracking::TrackLocalMap()
                 // 如果该地图点被相机观测数目nObs大于0，匹配内点计数+1
                 // nObs： 被观测到的相机数目，单目+1，双目或RGB-D则+2
                 if (mCurrentFrame.mvpMapPoints[i]->Observations() > 0)
+                {
                     mnMatchesInliers++;
+                }
             }
             else
+            {
                 // 记录当前帧跟踪到的地图点数目，用于统计跟踪效果
                 mnMatchesInliers++;
+            }
         }
         // 如果这个地图点是外点,并且当前相机输入还是双目的时候,就删除这个点
         // 原因分析：因为双目本身可以左右互匹配，删掉无所谓
@@ -3714,23 +3710,48 @@ bool Tracking::TrackLocalMap()
     mpLocalMapper->mnMatchesInliers = mnMatchesInliers;
     // Step 5：根据跟踪匹配数目及重定位情况决定是否跟踪成功
     // 如果最近刚刚发生了重定位,那么至少成功匹配50个点才认为是成功跟踪
-    if (mCurrentFrame.mnId < mnLastRelocFrameId + mMaxFrames && mnMatchesInliers < 50)
+    if (mCurrentFrame.mnId < mnLastRelocFrameId + mMaxFrames && mnMatchesInliers < 30)
+    {
+        LOG(WARNING) << "TrackLocalMap --- relocalization recently, but match inliers is : " << mnMatchesInliers
+                     << ", less than 30";
+        LOG(WARNING) << "TrackLocalMap --- track local map failed. \n\n";
+
         return false;
+    }
 
     // RECENTLY_LOST状态下，至少成功跟踪10个才算成功
     if ((mnMatchesInliers > 10) && (mState == RECENTLY_LOST))
+    {
+        LOG(INFO) << "TrackLocalMap --- mState == RECENTLY_LOST, match inliers is : " << mnMatchesInliers
+                  << ", more than 10";
+        LOG(INFO) << "TrackLocalMap --- track local map success. ";
         return true;
+    }
 
     // 单目IMU模式下做完初始化至少成功跟踪15个才算成功，没做初始化需要50个
     if (mSensor == System::IMU_MONOCULAR)
     {
-        if ((mnMatchesInliers < 15 && mpAtlas->isImuInitialized()) ||
-            (mnMatchesInliers < 50 && !mpAtlas->isImuInitialized()))
+        if ((mnMatchesInliers < 15 && mpAtlas->isImuInitialized()))
         {
+            LOG(WARNING) << ", mpAtlas isImuInitialized : "
+                         << "TrackLocalMap --- match inliers is : " << mnMatchesInliers << ", less than : " << 15;
+            LOG(WARNING) << "TrackLocalMap --- track local map failed. \n\n";
+            return false;
+        }
+        else if (mnMatchesInliers < 30 && !mpAtlas->isImuInitialized())
+        {
+            LOG(WARNING) << "mpAtlas is not ImuInitialized : "
+                         << "TrackLocalMap --- match inliers is : " << mnMatchesInliers << ", less than : " << 30;
+            LOG(WARNING) << "TrackLocalMap --- track local map failed. \n\n";
             return false;
         }
         else
+        {
+            LOG(INFO) << "TrackLocalMap --- match inliers is : " << mnMatchesInliers
+                      << ", mpAtlas isImuInitialized : " << mpAtlas->isImuInitialized();
+            LOG(INFO) << "TrackLocalMap --- track local map success. ";
             return true;
+        }
     }
     else if (mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
     {
@@ -3765,18 +3786,26 @@ bool Tracking::TrackLocalMap()
  */
 bool Tracking::NeedNewKeyFrame()
 {
+    LOG(INFO) << "NeedNewKeyFrame --- check need new keyframe";
     // 如果是IMU模式并且当前地图中未完成IMU初始化
     if ((mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD) &&
         !mpAtlas->GetCurrentMap()->isImuInitialized())
     {
         // 如果是IMU模式，当前帧距离上一关键帧时间戳超过0.25s，则说明需要插入关键帧，不再进行后续判断
-        if (mSensor == System::IMU_MONOCULAR && (mCurrentFrame.mTimeStamp - mpLastKeyFrame->mTimeStamp) >= 0.25)
+        if ((mCurrentFrame.mTimeStamp - mpLastKeyFrame->mTimeStamp) >= 0.25)
+        {
+            LOG(INFO) << "NeedNewKeyFrame --- imu is not initialized, time interval : "
+                      << mCurrentFrame.mTimeStamp - mpLastKeyFrame->mTimeStamp << ", more than : " << 0.25;
+            LOG(INFO) << "NeedNewKeyFrame --- need new keyframe";
             return true;
-        else if ((mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD) &&
-                 (mCurrentFrame.mTimeStamp - mpLastKeyFrame->mTimeStamp) >= 0.25)
-            return true;
+        }
         else
+        {
+            LOG(INFO) << "NeedNewKeyFrame --- imu is not initialized, time interval : "
+                      << mCurrentFrame.mTimeStamp - mpLastKeyFrame->mTimeStamp << ", less than : " << 0.25;
+            LOG(INFO) << "NeedNewKeyFrame --- don't need new keyframe";
             return false;
+        }
     }
 
     // Step 1：纯VO模式下不插入关键帧
@@ -3791,6 +3820,8 @@ bool Tracking::NeedNewKeyFrame()
         {
             LOG(INFO) << "NeedNewKeyFrame: localmap stopped" << std::endl;
         }*/
+        LOG(INFO) << "NeedNewKeyFrame ---  Local Mapping is freezed by a Loop Closure do not insert keyframes";
+        LOG(INFO) << "NeedNewKeyFrame --- don't need new keyframe";
         return false;
     }
 
@@ -3804,6 +3835,9 @@ bool Tracking::NeedNewKeyFrame()
     //  Step 3：如果距离上一次重定位比较近，并且关键帧数目超出最大限制，不插入关键帧
     if (mCurrentFrame.mnId < mnLastRelocFrameId + mMaxFrames && nKFs > mMaxFrames)
     {
+        LOG(INFO)
+            << "NeedNewKeyFrame --- Do not insert keyframes if not enough frames have passed from last relocalisation";
+        LOG(INFO) << "NeedNewKeyFrame --- don't need new keyframe";
         return false;
     }
 
@@ -3927,6 +3961,8 @@ bool Tracking::NeedNewKeyFrame()
     else
         c4 = false;
 
+    LOG(INFO) << "NeedNewKeyFrame --- c1a " << c1a << ", c1b : " << c1b << ", c1c : " << c1c << ", c2 : " << c2
+              << ", c3 : " << c3 << ", c4 : " << c4;
     // 相比ORB-SLAM2多了c3,c4
     if (((c1a || c1b || c1c) && c2) || c3 || c4)
     {
@@ -3936,10 +3972,14 @@ bool Tracking::NeedNewKeyFrame()
         if (bLocalMappingIdle || mpLocalMapper->IsInitializing())
         {
             // 可以插入关键帧
+            LOG(INFO) << "NeedNewKeyFrame --- LocalMappingIdle : " << bLocalMappingIdle
+                      << ", mpLocalMapper is initializing : " << mpLocalMapper->IsInitializing();
+            LOG(INFO) << "NeedNewKeyFrame ---  need new keyframe";
             return true;
         }
         else
         {
+            LOG(INFO) << "NeedNewKeyFrame --- interrupt BA";
             mpLocalMapper->InterruptBA();
             if (mSensor != System::MONOCULAR && mSensor != System::IMU_MONOCULAR)
             {
@@ -3947,11 +3987,19 @@ bool Tracking::NeedNewKeyFrame()
                 // tracking插入关键帧不是直接插入，而且先插入到mlNewKeyFrames中，
                 // 然后localmapper再逐个pop出来插入到mspKeyFrames
                 if (mpLocalMapper->KeyframesInQueue() < 3)
+                {
                     // 队列中的关键帧数目不是很多,可以插入
+                    LOG(INFO) << "NeedNewKeyFrame --- key frame in local mapper is less than 3";
+                    LOG(INFO) << "NeedNewKeyFrame ---  need new keyframe";
                     return true;
+                }
                 else
+                {
+                    LOG(INFO) << "NeedNewKeyFrame --- key frame in local mapper is less than 3";
+                    LOG(INFO) << "NeedNewKeyFrame ---  need new keyframe";
                     // 队列中缓冲的关键帧数目太多,暂时不能插入
                     return false;
+                }
             }
             else
             {
@@ -3964,8 +4012,11 @@ bool Tracking::NeedNewKeyFrame()
         }
     }
     else
+    {
+        LOG(INFO) << "NeedNewKeyFrame --- don't need new keyframe";
         // 不满足上面的条件,自然不能插入关键帧
         return false;
+    }
 }
 
 /**
@@ -3980,16 +4031,30 @@ void Tracking::CreateNewKeyFrame()
 {
     // 如果局部建图线程正在初始化且没做完或关闭了,就无法插入关键帧
     if (mpLocalMapper->IsInitializing() && !mpAtlas->isImuInitialized())
+    {
+        LOG(INFO) << "CreateNewKeyFrame --- local mapper is initializing, " << mpLocalMapper->IsInitializing()
+                  << ", atlas is imu initialized : " << mpAtlas->isImuInitialized();
+        LOG(INFO) << "CreateNewKeyFrame --- don't create new keyframe";
         return;
+    }
 
     if (!mpLocalMapper->SetNotStop(true))
+    {
+        LOG(INFO) << "CreateNewKeyFrame --- local mapper is stopped";
+        LOG(INFO) << "CreateNewKeyFrame --- don't create new keyframe";
         return;
+    }
 
     // Step 1：将当前帧构造成关键帧
     KeyFrame* pKF = new KeyFrame(mCurrentFrame, mpAtlas->GetCurrentMap(), mpKeyFrameDB);
+    LOG(INFO) << "CreateNewKeyFrame --- create new keyframe, imu bias ba: " << pKF->mBiasGBA.bax << " "
+              << pKF->mBiasGBA.bay << " " << pKF->mBiasGBA.baz << " "
+              << ", bg: " << pKF->mBiasGBA.bwx << " " << pKF->mBiasGBA.bwy << " " << pKF->mBiasGBA.bwz;
 
     if (mpAtlas->isImuInitialized())  //  || mpLocalMapper->IsInitializing())
+    {
         pKF->bImu = true;
+    }
 
     pKF->SetNewBias(mCurrentFrame.mImuBias);
     // Step 2：将当前关键帧设置为当前帧的参考关键帧
@@ -4003,7 +4068,9 @@ void Tracking::CreateNewKeyFrame()
         mpLastKeyFrame->mNextKF = pKF;
     }
     else
-        LOG(INFO) << "No last KF in KF creation!!";
+    {
+        LOG(INFO) << "CreateNewKeyFrame --- No last KF in KF creation!!";
+    }
 
     // Reset preintegration from last KF (Create new object)
     if (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD)
@@ -4118,14 +4185,17 @@ void Tracking::CreateNewKeyFrame()
 
     // Step 4：插入关键帧
     // 关键帧插入到列表 mlNewKeyFrames中，等待local mapping线程临幸
+    LOG(INFO) << "CreateNewKeyFrame --- local mapper insert key frame";
     mpLocalMapper->InsertKeyFrame(pKF);
 
     // 插入好了，允许局部建图停止
+    LOG(INFO) << "CreateNewKeyFrame --- local mapper set not stop";
     mpLocalMapper->SetNotStop(false);
 
     // 当前帧成为新的关键帧，更新
     mnLastKeyFrameId = mCurrentFrame.mnId;
     mpLastKeyFrame   = pKF;
+    LOG(INFO) << "CreateNewKeyFrame --- update last keyframe, id: " << mnLastKeyFrameId;
 }
 
 /**
@@ -4813,7 +4883,7 @@ void Tracking::Reset(bool bLocMap)
  */
 void Tracking::ResetActiveMap(bool bLocMap)
 {
-    LOG(INFO) << "Active map Reseting";
+    LOG(WARNING) << "ResetActiveMap --- Active map Reseting";
     if (mpViewer)
     {
         mpViewer->RequestStop();
@@ -4825,20 +4895,20 @@ void Tracking::ResetActiveMap(bool bLocMap)
 
     if (!bLocMap)
     {
-        LOG(INFO) << "Reseting Local Mapper...";
+        LOG(WARNING) << "ResetActiveMap --- Reseting Local Mapper...";
         mpLocalMapper->RequestResetActiveMap(pMap);
-        LOG(INFO) << "done";
+        LOG(WARNING) << "ResetActiveMap --- done";
     }
 
     // Reset Loop Closing
-    LOG(INFO) << "Reseting Loop Closing...";
+    LOG(WARNING) << "ResetActiveMap --- Reseting Loop Closing...";
     mpLoopClosing->RequestResetActiveMap(pMap);
-    LOG(INFO) << "done";
+    LOG(WARNING) << "ResetActiveMap --- done";
 
     // Clear BoW Database
-    LOG(INFO) << "Reseting KeyFrame Database";
+    LOG(WARNING) << "ResetActiveMap --- Reseting KeyFrame Database";
     mpKeyFrameDB->clearMap(pMap);  // Only clear the active map references
-    LOG(INFO) << "done";
+    LOG(WARNING) << "ResetActiveMap --- done";
 
     // Clear Map (this erase MapPoints and KeyFrames)
     mpAtlas->clearMap();
@@ -4854,7 +4924,7 @@ void Tracking::ResetActiveMap(bool bLocMap)
     list<bool> lbLost;
     // lbLost.reserve(mlbLost.size());
     unsigned int index = mnFirstFrameId;
-    LOG(INFO) << "mnFirstFrameId = " << mnFirstFrameId << endl;
+    LOG(WARNING) << "ResetActiveMap --- mnFirstFrameId = " << mnFirstFrameId << endl;
     for (Map* pMap : mpAtlas->GetAllMaps())
     {
         if (pMap->GetAllKeyFrames().size() > 0)
@@ -4864,9 +4934,9 @@ void Tracking::ResetActiveMap(bool bLocMap)
         }
     }
 
-    // LOG(INFO) << "First Frame id: " << index << endl;
+    // LOG(WARNING) << "First Frame id: " << index << endl;
     int num_lost = 0;
-    LOG(INFO) << "mnInitialFrameId = " << mnInitialFrameId << endl;
+    LOG(WARNING) << "ResetActiveMap --- mnInitialFrameId = " << mnInitialFrameId << endl;
 
     for (list<bool>::iterator ilbL = mlbLost.begin(); ilbL != mlbLost.end(); ilbL++)
     {
@@ -4880,7 +4950,7 @@ void Tracking::ResetActiveMap(bool bLocMap)
 
         index++;
     }
-    LOG(INFO) << num_lost << " Frames set to lost" << endl;
+    LOG(WARNING) << num_lost << "ResetActiveMap --- Frames set to lost" << endl;
 
     mlbLost = lbLost;
 
@@ -4898,7 +4968,7 @@ void Tracking::ResetActiveMap(bool bLocMap)
     if (mpViewer)
         mpViewer->Release();
 
-    LOG(INFO) << "   End reseting! ";
+    LOG(WARNING) << "ResetActiveMap --- End reseting! \n\n";
 }
 
 /**
