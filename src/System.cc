@@ -500,6 +500,7 @@ Sophus::SE3f System::TrackMonocular(const cv::Mat& im, const double& timestamp, 
             // 关闭线程可以使得别的线程得到更多的资源
             mbActivateLocalizationMode = false;
         }
+
         if (mbDeactivateLocalizationMode)
         {
             mpTracker->InformOnlyTracking(false);
@@ -589,7 +590,7 @@ void System::Shutdown()
         mbShutDown = true;
     }
 
-    LOG(INFO) << "Shutdown" << endl;
+    LOG(INFO) << "Shutdown --- the whole system is shutdowning..." << endl;
 
     if (mpViewer)
     {
