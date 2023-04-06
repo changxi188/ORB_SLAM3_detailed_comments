@@ -125,6 +125,7 @@ void LocalMapping::Run()
 
         if (mbBadImu)
         {
+            LOG(ERROR) << "Run --- Bad imu";
             // 查看是否有复位线程的请求
             ResetIfRequested();
 
@@ -229,7 +230,6 @@ void LocalMapping::Run()
         // 已经处理完队列中的最后的一个关键帧
         if (!CheckNewKeyFrames())
         {
-            LOG(INFO) << "Run --- keyframe buffer is empty";
             // Find more matches in neighbor keyframes and fuse point duplications
             //  Step 5 检查并融合当前关键帧与相邻关键帧帧（两级相邻）中重复的地图点
             // 先完成相邻关键帧与当前关键帧的地图点的融合（在相邻关键帧中查找当前关键帧的地图点），
@@ -290,7 +290,7 @@ void LocalMapping::Run()
             continue;
         }
 
-        LOG(INFO) << "Run --- keyframe buffer is empty, no stop request.";
+        LOG(INFO) << "Run --- last keyframe in buffer has been processed, so we can do some additional operations";
         // 当前地图中关键帧数目大于2个
         if (mpAtlas->KeyFramesInMap() > 2)
         {
@@ -305,7 +305,9 @@ void LocalMapping::Run()
                         .norm();
                 // 如果距离大于5厘米，记录当前KF和上一KF时间戳的差，累加到mTinit
                 if (dist > 0.05)
+                {
                     mTinit += mpCurrentKeyFrame->mTimeStamp - mpCurrentKeyFrame->mPrevKF->mTimeStamp;
+                }
                 // 当前关键帧所在的地图尚未完成IMU BA2（IMU第三阶段初始化）
                 if (!mpCurrentKeyFrame->GetMap()->GetIniertialBA2())
                 {
@@ -420,14 +422,14 @@ void LocalMapping::Run()
                 {
                     if (mTinit > 15.0f)
                     {
-                        cout << "start VIBA 2" << endl;
+                        LOG(INFO) << "start VIBA 2" << endl;
                         mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
                         if (mbMonocular)
                             InitializeIMU(0.f, 0.f, true);
                         else
                             InitializeIMU(0.f, 0.f, true);
 
-                        cout << "end VIBA 2" << endl;
+                        LOG(INFO) << "end VIBA 2" << endl;
                     }
                 }
 
@@ -1419,69 +1421,72 @@ void LocalMapping::KeyFrameCulling()
         for (size_t i = 0, iend = vpMapPoints.size(); i < iend; i++)
         {
             MapPoint* pMP = vpMapPoints[i];
-            if (pMP)
+            if (!pMP)
             {
-                if (!pMP->isBad())
-                {
-                    if (!mbMonocular)
-                    {
-                        // 对于双目，仅考虑近处（不超过基线的40倍 ）的地图点
-                        if (pKF->mvDepth[i] > pKF->mThDepth || pKF->mvDepth[i] < 0)
-                            continue;
-                    }
+                continue;
+            }
+            if (pMP->isBad())
+            {
+                continue;
+            }
 
-                    nMPs++;
-                    // pMP->Observations() 是观测到该地图点的相机总数目（单目1，双目2）
-                    if (pMP->Observations() > thObs)
+            if (!mbMonocular)
+            {
+                // 对于双目，仅考虑近处（不超过基线的40倍 ）的地图点
+                if (pKF->mvDepth[i] > pKF->mThDepth || pKF->mvDepth[i] < 0)
+                    continue;
+            }
+
+            nMPs++;
+            // pMP->Observations() 是观测到该地图点的相机总数目（单目1，双目2）
+            if (pMP->Observations() <= thObs)
+            {
+                continue;
+            }
+
+            const int&                            scaleLevel   = (pKF->NLeft == -1) ? pKF->mvKeysUn[i].octave :
+                                                                 (i < pKF->NLeft)   ? pKF->mvKeys[i].octave :
+                                                                                      pKF->mvKeysRight[i].octave;
+            const map<KeyFrame*, tuple<int, int>> observations = pMP->GetObservations();
+            int                                   nObs         = 0;
+            // 遍历观测到该地图点的关键帧
+            for (map<KeyFrame*, tuple<int, int>>::const_iterator mit = observations.begin(), mend = observations.end();
+                 mit != mend; mit++)
+            {
+                KeyFrame* pKFi = mit->first;
+                if (pKFi == pKF)
+                    continue;
+                tuple<int, int> indexes   = mit->second;
+                int             leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
+                int             scaleLeveli = -1;
+                if (pKFi->NLeft == -1)
+                    scaleLeveli = pKFi->mvKeysUn[leftIndex].octave;
+                else
+                {
+                    if (leftIndex != -1)
                     {
-                        const int& scaleLevel = (pKF->NLeft == -1) ? pKF->mvKeysUn[i].octave :
-                                                (i < pKF->NLeft)   ? pKF->mvKeys[i].octave :
-                                                                     pKF->mvKeysRight[i].octave;
-                        const map<KeyFrame*, tuple<int, int>> observations = pMP->GetObservations();
-                        int                                   nObs         = 0;
-                        // 遍历观测到该地图点的关键帧
-                        for (map<KeyFrame*, tuple<int, int>>::const_iterator mit  = observations.begin(),
-                                                                             mend = observations.end();
-                             mit != mend; mit++)
-                        {
-                            KeyFrame* pKFi = mit->first;
-                            if (pKFi == pKF)
-                                continue;
-                            tuple<int, int> indexes   = mit->second;
-                            int             leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
-                            int             scaleLeveli = -1;
-                            if (pKFi->NLeft == -1)
-                                scaleLeveli = pKFi->mvKeysUn[leftIndex].octave;
-                            else
-                            {
-                                if (leftIndex != -1)
-                                {
-                                    scaleLeveli = pKFi->mvKeys[leftIndex].octave;
-                                }
-                                if (rightIndex != -1)
-                                {
-                                    int rightLevel = pKFi->mvKeysRight[rightIndex - pKFi->NLeft].octave;
-                                    scaleLeveli =
-                                        (scaleLeveli == -1 || scaleLeveli > rightLevel) ? rightLevel : scaleLeveli;
-                                }
-                            }
-                            // 尺度约束：为什么pKF 尺度+1 要大于等于 pKFi 尺度？
-                            // 回答：因为同样或更低金字塔层级的地图点更准确
-                            if (scaleLeveli <= scaleLevel + 1)
-                            {
-                                nObs++;
-                                // 已经找到3个满足条件的关键帧，就停止不找了
-                                if (nObs > thObs)
-                                    break;
-                            }
-                        }
-                        // 地图点至少被3个关键帧观测到，就记录为冗余点，更新冗余点计数数目
-                        if (nObs > thObs)
-                        {
-                            nRedundantObservations++;
-                        }
+                        scaleLeveli = pKFi->mvKeys[leftIndex].octave;
+                    }
+                    if (rightIndex != -1)
+                    {
+                        int rightLevel = pKFi->mvKeysRight[rightIndex - pKFi->NLeft].octave;
+                        scaleLeveli    = (scaleLeveli == -1 || scaleLeveli > rightLevel) ? rightLevel : scaleLeveli;
                     }
                 }
+                // 尺度约束：为什么pKF 尺度+1 要大于等于 pKFi 尺度？
+                // 回答：因为同样或更低金字塔层级的地图点更准确
+                if (scaleLeveli <= scaleLevel + 1)
+                {
+                    nObs++;
+                    // 已经找到3个满足条件的关键帧，就停止不找了
+                    if (nObs > thObs)
+                        break;
+                }
+            }
+            // 地图点至少被3个关键帧观测到，就记录为冗余点，更新冗余点计数数目
+            if (nObs > thObs)
+            {
+                nRedundantObservations++;
             }
         }
 
