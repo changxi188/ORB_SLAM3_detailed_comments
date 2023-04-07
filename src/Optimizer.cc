@@ -3259,7 +3259,9 @@ void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const l
     optimizer.setVerbose(false);
 
     if (pbStopFlag)
+    {
         optimizer.setForceStopFlag(pbStopFlag);
+    }
 
     int nNonFixed = 0;
 
@@ -3270,7 +3272,10 @@ void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const l
     {
         KeyFrame* pKFi = vpKFs[i];
         if (pKFi->mnId > maxKFid)
+        {
             continue;
+        }
+
         VertexPose* VP = new VertexPose(pKFi);
         VP->setId(pKFi->mnId);
         pIncKF      = pKFi;
@@ -3331,99 +3336,106 @@ void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const l
         // 必须有对应的上一个关键帧，感觉跟下面的判定冲突了
         if (!pKFi->mPrevKF)
         {
-            LOG(INFO) << "NOT INERTIAL LINK TO PREVIOUS FRAME!";
+            LOG(INFO) << "FullInertialBA --- NOT INERTIAL LINK TO PREVIOUS FRAME!";
             continue;
         }
 
-        if (pKFi->mPrevKF && pKFi->mnId <= maxKFid)
+        if (!pKFi->mPrevKF || pKFi->mnId > maxKFid)
         {
-            if (pKFi->isBad() || pKFi->mPrevKF->mnId > maxKFid)
-                continue;
-            // 这两个都必须为初始化后的关键帧
-            if (pKFi->bImu && pKFi->mPrevKF->bImu)
+            continue;
+        }
+
+        if (pKFi->isBad() || pKFi->mPrevKF->mnId > maxKFid)
+        {
+            continue;
+        }
+
+        // 这两个都必须为初始化后的关键帧
+        if (pKFi->bImu && pKFi->mPrevKF->bImu)
+        {
+            // 3.1 根据上一帧的偏置设定当前帧的新偏置
+            pKFi->mpImuPreintegrated->SetNewBias(pKFi->mPrevKF->GetImuBias());
+            // 3.2 提取节点
+            g2o::HyperGraph::Vertex* VP1 = optimizer.vertex(pKFi->mPrevKF->mnId);
+            g2o::HyperGraph::Vertex* VV1 = optimizer.vertex(maxKFid + 3 * (pKFi->mPrevKF->mnId) + 1);
+
+            g2o::HyperGraph::Vertex* VG1;
+            g2o::HyperGraph::Vertex* VA1;
+            g2o::HyperGraph::Vertex* VG2;
+            g2o::HyperGraph::Vertex* VA2;
+            // 根据不同输入配置相应的偏置节点
+            if (!bInit)
             {
-                // 3.1 根据上一帧的偏置设定当前帧的新偏置
-                pKFi->mpImuPreintegrated->SetNewBias(pKFi->mPrevKF->GetImuBias());
-                // 3.2 提取节点
-                g2o::HyperGraph::Vertex* VP1 = optimizer.vertex(pKFi->mPrevKF->mnId);
-                g2o::HyperGraph::Vertex* VV1 = optimizer.vertex(maxKFid + 3 * (pKFi->mPrevKF->mnId) + 1);
+                VG1 = optimizer.vertex(maxKFid + 3 * (pKFi->mPrevKF->mnId) + 2);
+                VA1 = optimizer.vertex(maxKFid + 3 * (pKFi->mPrevKF->mnId) + 3);
+                VG2 = optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 2);
+                VA2 = optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 3);
+            }
+            else
+            {
+                VG1 = optimizer.vertex(4 * maxKFid + 2);
+                VA1 = optimizer.vertex(4 * maxKFid + 3);
+            }
 
-                g2o::HyperGraph::Vertex* VG1;
-                g2o::HyperGraph::Vertex* VA1;
-                g2o::HyperGraph::Vertex* VG2;
-                g2o::HyperGraph::Vertex* VA2;
-                // 根据不同输入配置相应的偏置节点
-                if (!bInit)
+            g2o::HyperGraph::Vertex* VP2 = optimizer.vertex(pKFi->mnId);
+            g2o::HyperGraph::Vertex* VV2 = optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 1);
+
+            if (!bInit)
+            {
+                if (!VP1 || !VV1 || !VG1 || !VA1 || !VP2 || !VV2 || !VG2 || !VA2)
                 {
-                    VG1 = optimizer.vertex(maxKFid + 3 * (pKFi->mPrevKF->mnId) + 2);
-                    VA1 = optimizer.vertex(maxKFid + 3 * (pKFi->mPrevKF->mnId) + 3);
-                    VG2 = optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 2);
-                    VA2 = optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 3);
-                }
-                else
-                {
-                    VG1 = optimizer.vertex(4 * maxKFid + 2);
-                    VA1 = optimizer.vertex(4 * maxKFid + 3);
-                }
-
-                g2o::HyperGraph::Vertex* VP2 = optimizer.vertex(pKFi->mnId);
-                g2o::HyperGraph::Vertex* VV2 = optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 1);
-
-                if (!bInit)
-                {
-                    if (!VP1 || !VV1 || !VG1 || !VA1 || !VP2 || !VV2 || !VG2 || !VA2)
-                    {
-                        LOG(INFO) << "Error" << VP1 << ", " << VV1 << ", " << VG1 << ", " << VA1 << ", " << VP2 << ", "
-                                  << VV2 << ", " << VG2 << ", " << VA2 << endl;
-                        continue;
-                    }
-                }
-                else
-                {
-                    if (!VP1 || !VV1 || !VG1 || !VA1 || !VP2 || !VV2)
-                    {
-                        LOG(INFO) << "Error" << VP1 << ", " << VV1 << ", " << VG1 << ", " << VA1 << ", " << VP2 << ", "
-                                  << VV2 << endl;
-                        continue;
-                    }
-                }
-                // 3.3 设置边
-                EdgeInertial* ei = new EdgeInertial(pKFi->mpImuPreintegrated);
-                ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP1));
-                ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV1));
-                ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG1));
-                ei->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA1));
-                ei->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP2));
-                ei->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV2));
-
-                g2o::RobustKernelHuber* rki = new g2o::RobustKernelHuber;
-                ei->setRobustKernel(rki);
-                // 9个自由度的卡方检验（0.05）
-                rki->setDelta(sqrt(16.92));
-
-                optimizer.addEdge(ei);
-                // 加了每一个关键帧的偏置时，还要优化两帧之间偏置的误差
-                if (!bInit)
-                {
-                    EdgeGyroRW* egr = new EdgeGyroRW();
-                    egr->setVertex(0, VG1);
-                    egr->setVertex(1, VG2);
-                    Eigen::Matrix3d InfoG = pKFi->mpImuPreintegrated->C.block<3, 3>(9, 9).cast<double>().inverse();
-                    egr->setInformation(InfoG);
-                    egr->computeError();
-                    optimizer.addEdge(egr);
-
-                    EdgeAccRW* ear = new EdgeAccRW();
-                    ear->setVertex(0, VA1);
-                    ear->setVertex(1, VA2);
-                    Eigen::Matrix3d InfoA = pKFi->mpImuPreintegrated->C.block<3, 3>(12, 12).cast<double>().inverse();
-                    ear->setInformation(InfoA);
-                    ear->computeError();
-                    optimizer.addEdge(ear);
+                    LOG(INFO) << "Error" << VP1 << ", " << VV1 << ", " << VG1 << ", " << VA1 << ", " << VP2 << ", "
+                              << VV2 << ", " << VG2 << ", " << VA2 << endl;
+                    continue;
                 }
             }
             else
-                LOG(INFO) << pKFi->mnId << " or " << pKFi->mPrevKF->mnId << " no imu" << endl;
+            {
+                if (!VP1 || !VV1 || !VG1 || !VA1 || !VP2 || !VV2)
+                {
+                    LOG(INFO) << "Error" << VP1 << ", " << VV1 << ", " << VG1 << ", " << VA1 << ", " << VP2 << ", "
+                              << VV2 << endl;
+                    continue;
+                }
+            }
+            // 3.3 设置边
+            EdgeInertial* ei = new EdgeInertial(pKFi->mpImuPreintegrated);
+            ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP1));
+            ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV1));
+            ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG1));
+            ei->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA1));
+            ei->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP2));
+            ei->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV2));
+
+            g2o::RobustKernelHuber* rki = new g2o::RobustKernelHuber;
+            ei->setRobustKernel(rki);
+            // 9个自由度的卡方检验（0.05）
+            rki->setDelta(sqrt(16.92));
+
+            optimizer.addEdge(ei);
+            // 加了每一个关键帧的偏置时，还要优化两帧之间偏置的误差
+            if (!bInit)
+            {
+                EdgeGyroRW* egr = new EdgeGyroRW();
+                egr->setVertex(0, VG1);
+                egr->setVertex(1, VG2);
+                Eigen::Matrix3d InfoG = pKFi->mpImuPreintegrated->C.block<3, 3>(9, 9).cast<double>().inverse();
+                egr->setInformation(InfoG);
+                egr->computeError();
+                optimizer.addEdge(egr);
+
+                EdgeAccRW* ear = new EdgeAccRW();
+                ear->setVertex(0, VA1);
+                ear->setVertex(1, VA2);
+                Eigen::Matrix3d InfoA = pKFi->mpImuPreintegrated->C.block<3, 3>(12, 12).cast<double>().inverse();
+                ear->setInformation(InfoA);
+                ear->computeError();
+                optimizer.addEdge(ear);
+            }
+        }
+        else
+        {
+            LOG(INFO) << "FullInertialBA --- " << pKFi->mnId << " or " << pKFi->mPrevKF->mnId << " no imu";
         }
     }
 
@@ -3481,18 +3493,83 @@ void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const l
             if (pKFi->mnId > maxKFid)
                 continue;
 
-            if (!pKFi->isBad())
+            if (pKFi->isBad())
             {
-                const int    leftIndex = get<0>(mit->second);
-                cv::KeyPoint kpUn;
-                // 添加边
-                if (leftIndex != -1 && pKFi->mvuRight[get<0>(mit->second)] < 0)  // Monocular observation
+                continue;
+            }
+
+            const int    leftIndex = get<0>(mit->second);
+            cv::KeyPoint kpUn;
+            // 添加边
+            if (leftIndex != -1 && pKFi->mvuRight[get<0>(mit->second)] < 0)  // Monocular observation
+            {
+                kpUn = pKFi->mvKeysUn[leftIndex];
+                Eigen::Matrix<double, 2, 1> obs;
+                obs << kpUn.pt.x, kpUn.pt.y;
+
+                EdgeMono* e = new EdgeMono(0);
+
+                g2o::OptimizableGraph::Vertex* VP =
+                    dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId));
+                if (bAllFixed)
+                    if (!VP->fixed())
+                        bAllFixed = false;
+
+                e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
+                e->setVertex(1, VP);
+                e->setMeasurement(obs);
+                const float invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
+
+                e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+
+                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                e->setRobustKernel(rk);
+                rk->setDelta(thHuberMono);
+
+                optimizer.addEdge(e);
+            }
+            else if (leftIndex != -1 && pKFi->mvuRight[leftIndex] >= 0)  // stereo observation
+            {
+                kpUn                              = pKFi->mvKeysUn[leftIndex];
+                const float                 kp_ur = pKFi->mvuRight[leftIndex];
+                Eigen::Matrix<double, 3, 1> obs;
+                obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+
+                EdgeStereo* e = new EdgeStereo(0);
+
+                g2o::OptimizableGraph::Vertex* VP =
+                    dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId));
+                if (bAllFixed)
+                    if (!VP->fixed())
+                        bAllFixed = false;
+
+                e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
+                e->setVertex(1, VP);
+                e->setMeasurement(obs);
+                const float invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
+
+                e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
+
+                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                e->setRobustKernel(rk);
+                rk->setDelta(thHuberStereo);
+
+                optimizer.addEdge(e);
+            }
+
+            if (pKFi->mpCamera2)
+            {  // Monocular right observation
+                int rightIndex = get<1>(mit->second);
+
+                if (rightIndex != -1 && rightIndex < pKFi->mvKeysRight.size())
                 {
-                    kpUn = pKFi->mvKeysUn[leftIndex];
+                    rightIndex -= pKFi->NLeft;
+
                     Eigen::Matrix<double, 2, 1> obs;
+                    kpUn = pKFi->mvKeysRight[rightIndex];
                     obs << kpUn.pt.x, kpUn.pt.y;
 
-                    EdgeMono* e = new EdgeMono(0);
+                    EdgeMono* e = new EdgeMono(1);
 
                     g2o::OptimizableGraph::Vertex* VP =
                         dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId));
@@ -3504,7 +3581,6 @@ void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const l
                     e->setVertex(1, VP);
                     e->setMeasurement(obs);
                     const float invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
-
                     e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
 
                     g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
@@ -3512,68 +3588,6 @@ void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const l
                     rk->setDelta(thHuberMono);
 
                     optimizer.addEdge(e);
-                }
-                else if (leftIndex != -1 && pKFi->mvuRight[leftIndex] >= 0)  // stereo observation
-                {
-                    kpUn                              = pKFi->mvKeysUn[leftIndex];
-                    const float                 kp_ur = pKFi->mvuRight[leftIndex];
-                    Eigen::Matrix<double, 3, 1> obs;
-                    obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-
-                    EdgeStereo* e = new EdgeStereo(0);
-
-                    g2o::OptimizableGraph::Vertex* VP =
-                        dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId));
-                    if (bAllFixed)
-                        if (!VP->fixed())
-                            bAllFixed = false;
-
-                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
-                    e->setVertex(1, VP);
-                    e->setMeasurement(obs);
-                    const float invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
-
-                    e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
-
-                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    e->setRobustKernel(rk);
-                    rk->setDelta(thHuberStereo);
-
-                    optimizer.addEdge(e);
-                }
-
-                if (pKFi->mpCamera2)
-                {  // Monocular right observation
-                    int rightIndex = get<1>(mit->second);
-
-                    if (rightIndex != -1 && rightIndex < pKFi->mvKeysRight.size())
-                    {
-                        rightIndex -= pKFi->NLeft;
-
-                        Eigen::Matrix<double, 2, 1> obs;
-                        kpUn = pKFi->mvKeysRight[rightIndex];
-                        obs << kpUn.pt.x, kpUn.pt.y;
-
-                        EdgeMono* e = new EdgeMono(1);
-
-                        g2o::OptimizableGraph::Vertex* VP =
-                            dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId));
-                        if (bAllFixed)
-                            if (!VP->fixed())
-                                bAllFixed = false;
-
-                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
-                        e->setVertex(1, VP);
-                        e->setMeasurement(obs);
-                        const float invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
-                        e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
-
-                        g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                        e->setRobustKernel(rk);
-                        rk->setDelta(thHuberMono);
-
-                        optimizer.addEdge(e);
-                    }
                 }
             }
         }
@@ -3586,9 +3600,10 @@ void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const l
         }
     }
 
-    if (pbStopFlag)
-        if (*pbStopFlag)
-            return;
+    if (pbStopFlag && *pbStopFlag)
+    {
+        return;
+    }
 
     optimizer.initializeOptimization();
     optimizer.optimize(its);
@@ -3612,6 +3627,7 @@ void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const l
             pKFi->mTcwGBA = Sophus::SE3f(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
             pKFi->mnBAGlobalForKF = nLoopId;
         }
+
         if (pKFi->bImu)
         {
             VertexVelocity* VV = static_cast<VertexVelocity*>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 1));
@@ -3697,7 +3713,7 @@ void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg, double& sc
                                      Eigen::Vector3d& ba, bool bMono, Eigen::MatrixXd& covInertial, bool bFixedVel,
                                      bool bGauss, float priorG, float priorA)
 {
-    LOG(INFO) << "inertial optimization";
+    LOG(INFO) << "InertialOptimization --- inertial optimization";
     int                     its     = 200;
     long unsigned int       maxKFid = pMap->GetMaxKFid();
     const vector<KeyFrame*> vpKFs   = pMap->GetAllKeyFrames();  // 获取所有关键帧
@@ -3714,7 +3730,9 @@ void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg, double& sc
     g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
 
     if (priorG != 0.f)
+    {
         solver->setUserLambdaInit(1e3);
+    }
 
     optimizer.setAlgorithm(solver);
 
@@ -3799,47 +3817,52 @@ void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg, double& sc
     {
         KeyFrame* pKFi = vpKFs[i];
 
-        if (pKFi->mPrevKF && pKFi->mnId <= maxKFid)
+        if (!pKFi->mPrevKF || pKFi->mnId > maxKFid)
         {
-            if (pKFi->isBad() || pKFi->mPrevKF->mnId > maxKFid)
-                continue;
-            if (!pKFi->mpImuPreintegrated)
-                LOG(INFO) << "Not preintegrated measurement" << std::endl;
-            // 到这里的条件是pKFi是好的，并且它有上一个关键帧，且他们的id要小于最大id
-            // 6.1 检查节点指针是否为空
-            // 将pKFi偏置设定为上一关键帧的偏置
-            pKFi->mpImuPreintegrated->SetNewBias(pKFi->mPrevKF->GetImuBias());
-            g2o::HyperGraph::Vertex* VP1   = optimizer.vertex(pKFi->mPrevKF->mnId);
-            g2o::HyperGraph::Vertex* VV1   = optimizer.vertex(maxKFid + (pKFi->mPrevKF->mnId) + 1);
-            g2o::HyperGraph::Vertex* VP2   = optimizer.vertex(pKFi->mnId);
-            g2o::HyperGraph::Vertex* VV2   = optimizer.vertex(maxKFid + (pKFi->mnId) + 1);
-            g2o::HyperGraph::Vertex* VG    = optimizer.vertex(maxKFid * 2 + 2);
-            g2o::HyperGraph::Vertex* VA    = optimizer.vertex(maxKFid * 2 + 3);
-            g2o::HyperGraph::Vertex* VGDir = optimizer.vertex(maxKFid * 2 + 4);
-            g2o::HyperGraph::Vertex* VS    = optimizer.vertex(maxKFid * 2 + 5);
-            if (!VP1 || !VV1 || !VG || !VA || !VP2 || !VV2 || !VGDir || !VS)
-            {
-                LOG(INFO) << "Error" << VP1 << ", " << VV1 << ", " << VG << ", " << VA << ", " << VP2 << ", " << VV2
-                          << ", " << VGDir << ", " << VS << endl;
-
-                continue;
-            }
-            // 6.2 这是一个大边。。。。包含了上面所有信息，注意到前面的两个偏置也做了两个一元边加入
-            EdgeInertialGS* ei = new EdgeInertialGS(pKFi->mpImuPreintegrated);
-            ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP1));
-            ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV1));
-            ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG));
-            ei->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA));
-            ei->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP2));
-            ei->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV2));
-            ei->setVertex(6, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VGDir));
-            ei->setVertex(7, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VS));
-
-            vpei.push_back(ei);
-
-            vppUsedKF.push_back(make_pair(pKFi->mPrevKF, pKFi));
-            optimizer.addEdge(ei);
+            continue;
         }
+
+        if (pKFi->isBad() || pKFi->mPrevKF->mnId > maxKFid)
+            continue;
+        if (!pKFi->mpImuPreintegrated)
+        {
+            LOG(INFO) << "Not preintegrated measurement" << std::endl;
+        }
+
+        // 到这里的条件是pKFi是好的，并且它有上一个关键帧，且他们的id要小于最大id
+        // 6.1 检查节点指针是否为空
+        // 将pKFi偏置设定为上一关键帧的偏置
+        pKFi->mpImuPreintegrated->SetNewBias(pKFi->mPrevKF->GetImuBias());
+        g2o::HyperGraph::Vertex* VP1   = optimizer.vertex(pKFi->mPrevKF->mnId);
+        g2o::HyperGraph::Vertex* VV1   = optimizer.vertex(maxKFid + (pKFi->mPrevKF->mnId) + 1);
+        g2o::HyperGraph::Vertex* VP2   = optimizer.vertex(pKFi->mnId);
+        g2o::HyperGraph::Vertex* VV2   = optimizer.vertex(maxKFid + (pKFi->mnId) + 1);
+        g2o::HyperGraph::Vertex* VG    = optimizer.vertex(maxKFid * 2 + 2);
+        g2o::HyperGraph::Vertex* VA    = optimizer.vertex(maxKFid * 2 + 3);
+        g2o::HyperGraph::Vertex* VGDir = optimizer.vertex(maxKFid * 2 + 4);
+        g2o::HyperGraph::Vertex* VS    = optimizer.vertex(maxKFid * 2 + 5);
+        if (!VP1 || !VV1 || !VG || !VA || !VP2 || !VV2 || !VGDir || !VS)
+        {
+            LOG(INFO) << "Error" << VP1 << ", " << VV1 << ", " << VG << ", " << VA << ", " << VP2 << ", " << VV2 << ", "
+                      << VGDir << ", " << VS << endl;
+
+            continue;
+        }
+        // 6.2 这是一个大边。。。。包含了上面所有信息，注意到前面的两个偏置也做了两个一元边加入
+        EdgeInertialGS* ei = new EdgeInertialGS(pKFi->mpImuPreintegrated);
+        ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP1));
+        ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV1));
+        ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG));
+        ei->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA));
+        ei->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP2));
+        ei->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV2));
+        ei->setVertex(6, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VGDir));
+        ei->setVertex(7, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VS));
+
+        vpei.push_back(ei);
+
+        vppUsedKF.push_back(make_pair(pKFi->mPrevKF, pKFi));
+        optimizer.addEdge(ei);
     }
 
     // Compute error for different scales
@@ -3871,7 +3894,9 @@ void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg, double& sc
     {
         KeyFrame* pKFi = vpKFs[i];
         if (pKFi->mnId > maxKFid)
+        {
             continue;
+        }
 
         VertexVelocity* VV = static_cast<VertexVelocity*>(optimizer.vertex(maxKFid + (pKFi->mnId) + 1));
         Eigen::Vector3d Vw = VV->estimate();  // Velocity is scaled after
