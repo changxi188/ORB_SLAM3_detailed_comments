@@ -1,4 +1,4 @@
-./../Examples/Monocular-Inertial/mono_inertial_euroc ./../Vocabulary/ORBvoc.txt ./../Examples/Monocular-Inertial/EuRoC.yaml     /media/mr/holo/rosbag/MH_04_difficult ./../Examples/Monocular-Inertial/EuRoC_TimeStamps/MH04.txt  /media/mr/holo/rosbag/MH_05_difficult ./../Examples/Monocular-Inertial/EuRoC_TimeStamps/MH05.txt  dataset-MH04_to_MH05_monoi
+./../Examples/Monocular-Inertial/mono_inertial_euroc ./../Vocabulary/ORBvoc.txt ./../Examples/Monocular-Inertial/EuRoC.yaml     /media/cheng/holo1/rosbag/MH_04_difficult/ ./../Examples/Monocular-Inertial/EuRoC_TimeStamps/MH04.txt  /media/cheng/holo1/rosbag/MH_05_difficult/ ./../Examples/Monocular-Inertial/EuRoC_TimeStamps/MH05.txt  dataset-MH04_to_MH05_monoi
 
 
 # /media/mr/holo/rosbag/MH_01_easy ./Examples/Monocular-Inertial/EuRoC_TimeStamps/MH01.txt

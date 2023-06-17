@@ -17,7 +17,6 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "System.h"
 #include <openssl/md5.h>
 #include <pangolin/pangolin.h>
 #include <boost/archive/binary_iarchive.hpp>
@@ -31,6 +30,7 @@
 #include <iomanip>
 #include <thread>
 #include "Converter.h"
+#include "System.h"
 
 namespace ORB_SLAM3
 {
@@ -133,7 +133,6 @@ System::System(const string& strVocFile, const string& strSettingsFile, const eS
     mStrVocabularyFilePath = strVocFile;
 
     // ORBSLAM3新加的多地图管理功能，这里加载Atlas标识符
-    bool loadedAtlas = false;
 
     if (mStrLoadAtlasFromFile.empty())
     {
@@ -196,8 +195,6 @@ System::System(const string& strVocFile, const string& strSettingsFile, const eS
 
         // LOG(INFO) << "KF in DB: " << mpKeyFrameDatabase->mnNumKFs << "; words: " << mpKeyFrameDatabase->mnNumWords <<
         // endl;
-
-        loadedAtlas = true;
 
         mpAtlas->CreateNewMap();
 

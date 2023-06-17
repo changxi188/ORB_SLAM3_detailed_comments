@@ -100,6 +100,7 @@ int main(int argc, char* argv[])
         LOG(INFO) << "LOADED!" << endl;
 
         LOG(INFO) << "Loading IMU for sequence " << seq << "...";
+        LOG(INFO) << "path IMU : " << pathImu;
         LoadIMU(pathImu, vTimestampsImu[seq], vAcc[seq], vGyro[seq]);
         LOG(INFO) << "LOADED!" << endl;
 
