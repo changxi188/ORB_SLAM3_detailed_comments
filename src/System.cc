@@ -527,8 +527,12 @@ Sophus::SE3f System::TrackMonocular(const cv::Mat& im, const double& timestamp, 
     LOG(INFO) << "TrackMonocular --- GrabImuData";
     // 如果是单目VIO模式，把IMU数据存储到队列mlQueueImuData
     if (mSensor == System::IMU_MONOCULAR)
+    {
         for (size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
+        {
             mpTracker->GrabImuData(vImuMeas[i_imu]);
+        }
+    }
 
     // 计算相机位姿
     LOG(INFO) << "TrackMonocular --- GrabImageMonocular";

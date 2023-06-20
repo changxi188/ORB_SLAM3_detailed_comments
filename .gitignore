@@ -76,3 +76,4 @@ cmake-build-debug/
 *.osa
 .vscode/settings.json
 .cache*
+.vimspector.json

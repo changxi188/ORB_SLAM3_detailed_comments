@@ -77,17 +77,17 @@ Tracking::Tracking(System* pSys, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer,
   , mbReadyToInitializate(false)
   , mpSystem(pSys)
   , mpViewer(NULL)
-  , bStepByStep(false)
   , mpFrameDrawer(pFrameDrawer)
   , mpMapDrawer(pMapDrawer)
+  , bStepByStep(false)
   , mpAtlas(pAtlas)
+  , mpLastKeyFrame(static_cast<KeyFrame*>(NULL))
   , mnLastRelocFrameId(0)
   , time_recently_lost(5.0)
+  , mnFirstFrameId(0)
   , mnInitialFrameId(0)
   , mbCreatedMap(false)
-  , mnFirstFrameId(0)
   , mpCamera2(nullptr)
-  , mpLastKeyFrame(static_cast<KeyFrame*>(NULL))
 {
     // Load camera parameters from settings file
     // Step 1 从配置文件中加载相机参数
@@ -1727,8 +1727,10 @@ Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat& im, const double& times
                                   mThDepth, &mLastFrame, *mpImuCalib);
         }
         else
+        {
             mCurrentFrame = Frame(mImGray, timestamp, mpORBextractorLeft, mpORBVocabulary, mpCamera, mDistCoef, mbf,
                                   mThDepth, &mLastFrame, *mpImuCalib);
+        }
     }
 
     // t0存储未初始化时的第1帧图像时间戳

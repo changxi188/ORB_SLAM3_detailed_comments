@@ -42,6 +42,7 @@ double ttrack_tot = 0;
 int main(int argc, char* argv[])
 {
     google::InitGoogleLogging(argv[0]);
+    google::SetLogDestination(google::INFO, "./log/ORB_SLAM3.log");
 
     FLAGS_colorlogtostderr = true;
     FLAGS_alsologtostderr  = true;
@@ -132,17 +133,12 @@ int main(int argc, char* argv[])
     float             imageScale = SLAM.GetImageScale();
     LOG(INFO) << "Constructed System";
 
-    double t_resize = 0.f;
-    double t_track  = 0.f;
-
-    int proccIm = 0;
     for (seq = 0; seq < num_seq; seq++)
     {
         // Main loop
         cv::Mat                       im;
         vector<ORB_SLAM3::IMU::Point> vImuMeas;
-        proccIm = 0;
-        for (int ni = 0; ni < nImages[seq]; ni++, proccIm++)
+        for (int ni = 0; ni < nImages[seq]; ni++)
         {
             // Read image from file
             im = cv::imread(vstrImageFilenames[seq][ni], cv::IMREAD_UNCHANGED);  // CV_LOAD_IMAGE_UNCHANGED);
@@ -158,21 +154,13 @@ int main(int argc, char* argv[])
             if (imageScale != 1.f)
             {
 #ifdef REGISTER_TIMES
-#ifdef COMPILEDWITHC11
                 std::chrono::steady_clock::time_point t_Start_Resize = std::chrono::steady_clock::now();
-#else
-                std::chrono::monotonic_clock::time_point t_Start_Resize = std::chrono::monotonic_clock::now();
-#endif
 #endif
                 int width  = im.cols * imageScale;
                 int height = im.rows * imageScale;
                 cv::resize(im, im, cv::Size(width, height));
 #ifdef REGISTER_TIMES
-#ifdef COMPILEDWITHC11
                 std::chrono::steady_clock::time_point t_End_Resize = std::chrono::steady_clock::now();
-#else
-                std::chrono::monotonic_clock::time_point t_End_Resize   = std::chrono::monotonic_clock::now();
-#endif
                 t_resize = std::chrono::duration_cast<std::chrono::duration<double, std::milli> >(t_End_Resize -
                                                                                                   t_Start_Resize)
                                .count();
@@ -197,21 +185,13 @@ int main(int argc, char* argv[])
                 }
             }
 
-#ifdef COMPILEDWITHC11
             std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
-#else
-            std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
-#endif
 
             // Pass the image to the SLAM system
             // LOG(INFO) << "tframe = " << tframe << endl;
             SLAM.TrackMonocular(im, tframe, vImuMeas);  // TODO change to monocular_inertial
 
-#ifdef COMPILEDWITHC11
             std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
-#else
-            std::chrono::monotonic_clock::time_point t2 = std::chrono::monotonic_clock::now();
-#endif
 
 #ifdef REGISTER_TIMES
             t_track =
@@ -228,12 +208,18 @@ int main(int argc, char* argv[])
             // Wait to load the next frame
             double T = 0;
             if (ni < nImages[seq] - 1)
+            {
                 T = vTimestampsCam[seq][ni + 1] - tframe;
+            }
             else if (ni > 0)
+            {
                 T = tframe - vTimestampsCam[seq][ni - 1];
+            }
 
             if (ttrack < T)
+            {
                 usleep((T - ttrack) * 1e6);  // 1e6
+            }
         }
 
         if (seq < num_seq - 1)

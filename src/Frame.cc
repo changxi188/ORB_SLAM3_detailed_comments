@@ -49,14 +49,14 @@ cv::BFMatcher Frame::BFmatcher = cv::BFMatcher(cv::NORM_HAMMING);
 
 Frame::Frame()
   : mpcpi(NULL)
+  , mbHasPose(false)
+  , mbHasVelocity(false)
   , mpImuPreintegrated(NULL)
   , mpPrevFrame(NULL)
   , mpImuPreintegratedFrame(NULL)
   , mpReferenceKF(static_cast<KeyFrame*>(NULL))
   , mbIsSet(false)
   , mbImuPreintegrated(false)
-  , mbHasPose(false)
-  , mbHasVelocity(false)
 {
 #ifdef REGISTER_TIMES
     mTimeStereoMatch = 0;
@@ -159,6 +159,8 @@ Frame::Frame(const cv::Mat& imLeft, const cv::Mat& imRight, const double& timeSt
              ORBextractor* extractorRight, ORBVocabulary* voc, cv::Mat& K, cv::Mat& distCoef, const float& bf,
              const float& thDepth, GeometricCamera* pCamera, Frame* pPrevF, const IMU::Calib& ImuCalib)
   : mpcpi(NULL)
+  , mbHasPose(false)
+  , mbHasVelocity(false)
   , mpORBvocabulary(voc)
   , mpORBextractorLeft(extractorLeft)
   , mpORBextractorRight(extractorRight)
@@ -177,8 +179,6 @@ Frame::Frame(const cv::Mat& imLeft, const cv::Mat& imRight, const double& timeSt
   , mbImuPreintegrated(false)
   , mpCamera(pCamera)
   , mpCamera2(nullptr)
-  , mbHasPose(false)
-  , mbHasVelocity(false)
 {
     // Frame ID
     // Step 1 帧的ID 自增
@@ -310,6 +310,8 @@ Frame::Frame(const cv::Mat& imGray, const cv::Mat& imDepth, const double& timeSt
              ORBVocabulary* voc, cv::Mat& K, cv::Mat& distCoef, const float& bf, const float& thDepth,
              GeometricCamera* pCamera, Frame* pPrevF, const IMU::Calib& ImuCalib)
   : mpcpi(NULL)
+  , mbHasPose(false)
+  , mbHasVelocity(false)
   , mpORBvocabulary(voc)
   , mpORBextractorLeft(extractor)
   , mpORBextractorRight(static_cast<ORBextractor*>(NULL))
@@ -328,8 +330,6 @@ Frame::Frame(const cv::Mat& imGray, const cv::Mat& imDepth, const double& timeSt
   , mbImuPreintegrated(false)
   , mpCamera(pCamera)
   , mpCamera2(nullptr)
-  , mbHasPose(false)
-  , mbHasVelocity(false)
 {
     // Frame ID
     // Step 1 帧的ID 自增
@@ -445,6 +445,8 @@ Frame::Frame(const cv::Mat& imGray, const double& timeStamp, ORBextractor* extra
              GeometricCamera* pCamera, cv::Mat& distCoef, const float& bf, const float& thDepth, Frame* pPrevF,
              const IMU::Calib& ImuCalib)
   : mpcpi(NULL)
+  , mbHasPose(false)
+  , mbHasVelocity(false)
   , mpORBvocabulary(voc)
   , mpORBextractorLeft(extractor)
   , mpORBextractorRight(static_cast<ORBextractor*>(NULL))
@@ -463,8 +465,6 @@ Frame::Frame(const cv::Mat& imGray, const double& timeStamp, ORBextractor* extra
   , mbImuPreintegrated(false)
   , mpCamera(pCamera)
   , mpCamera2(nullptr)
-  , mbHasPose(false)
-  , mbHasVelocity(false)
 {
     // Frame ID
     // Step 1 帧的ID 自增
@@ -507,7 +507,9 @@ Frame::Frame(const cv::Mat& imGray, const double& timeStamp, ORBextractor* extra
     N = mvKeys.size();
     // 如果没有能够成功提取出特征点，那么就直接返回了
     if (mvKeys.empty())
+    {
         return;
+    }
 
     // Step 4 用OpenCV的矫正函数、内参对提取到的特征点进行矫正
     UndistortKeyPoints();
@@ -1574,6 +1576,8 @@ Frame::Frame(const cv::Mat& imLeft, const cv::Mat& imRight, const double& timeSt
              const float& thDepth, GeometricCamera* pCamera, GeometricCamera* pCamera2, Sophus::SE3f& Tlr,
              Frame* pPrevF, const IMU::Calib& ImuCalib)
   : mpcpi(NULL)
+  , mbHasPose(false)
+  , mbHasVelocity(false)
   , mpORBvocabulary(voc)
   , mpORBextractorLeft(extractorLeft)
   , mpORBextractorRight(extractorRight)
@@ -1591,9 +1595,6 @@ Frame::Frame(const cv::Mat& imLeft, const cv::Mat& imRight, const double& timeSt
   , mbImuPreintegrated(false)
   , mpCamera(pCamera)
   , mpCamera2(pCamera2)
-  , mbHasPose(false)
-  , mbHasVelocity(false)
-
 {
     imgLeft  = imLeft.clone();
     imgRight = imRight.clone();
@@ -1717,9 +1718,6 @@ void Frame::ComputeStereoFishEyeMatches()
     // 3. 暴力匹配
     BFmatcher.knnMatch(stereoDescLeft, stereoDescRight, matches, 2);
 
-    int nMatches    = 0;
-    int descMatches = 0;
-
     // Check matches using Lowe's ratio
     for (vector<vector<cv::DMatch>>::iterator it = matches.begin(); it != matches.end(); ++it)
     {
@@ -1729,9 +1727,8 @@ void Frame::ComputeStereoFishEyeMatches()
             // For every good match, check parallax and reprojection error to discard spurious matches
             //  对于好的匹配，做三角化，且深度值有效的放入结果
             Eigen::Vector3f p3D;
-            descMatches++;
-            float sigma1 = mvLevelSigma2[mvKeys[(*it)[0].queryIdx + monoLeft].octave],
-                  sigma2 = mvLevelSigma2[mvKeysRight[(*it)[0].trainIdx + monoRight].octave];
+            float           sigma1 = mvLevelSigma2[mvKeys[(*it)[0].queryIdx + monoLeft].octave],
+                  sigma2           = mvLevelSigma2[mvKeysRight[(*it)[0].trainIdx + monoRight].octave];
             // 三角化
             float depth = static_cast<KannalaBrandt8*>(mpCamera)->TriangulateMatches(
                 mpCamera2, mvKeys[(*it)[0].queryIdx + monoLeft], mvKeysRight[(*it)[0].trainIdx + monoRight], mRlr, mtlr,
@@ -1743,7 +1740,6 @@ void Frame::ComputeStereoFishEyeMatches()
                 mvRightToLeftMatch[(*it)[0].trainIdx + monoRight] = (*it)[0].queryIdx + monoLeft;
                 mvStereo3Dpoints[(*it)[0].queryIdx + monoLeft]    = p3D;
                 mvDepth[(*it)[0].queryIdx + monoLeft]             = depth;
-                nMatches++;
             }
         }
     }
