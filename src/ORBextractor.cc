@@ -538,7 +538,7 @@ ORBextractor::ORBextractor(int   _nfeatures,    // 指定要提取的特征点�
     const Point* pattern0 = (const Point*)bit_pattern_31_;
     // 使用std::back_inserter的目的是可以快覆盖掉这个容器pattern之前的数据
     // 其实这里的操作就是，将在全局变量区域的、int格式的随机采样点以cv::point格式复制到当前类对象中的成员变量中
-    std::copy(pattern0, pattern0 + npoints, std::back_inserter(pattern));
+    std::copy(pattern0, pattern0 + npoints, std::back_inserter(pattern_));
 
     // This is for orientation
     // 下面的内容是和特征点的旋转计算有关的
@@ -565,7 +565,9 @@ ORBextractor::ORBextractor(int   _nfeatures,    // 指定要提取的特征点�
 
     // 利用圆的方程计算每行像素的u坐标边界（max）
     for (v = 0; v <= vmax; ++v)
+    {
         umax[v] = cvRound(sqrt(hp2 - v * v));  // 结果都是大于0的结果，表示x坐标在这一行的边界
+    }
 
     // Make sure we are symmetric
     // 这里其实是使用了对称的方式计算上四分之一的圆周上的umax，目的也是为了保持严格的对称（如果按照常规的想法做，由于cvRound就会很容易出现不对称的情况，
@@ -573,7 +575,9 @@ ORBextractor::ORBextractor(int   _nfeatures,    // 指定要提取的特征点�
     for (v = HALF_PATCH_SIZE, v0 = 0; v >= vmin; --v)
     {
         while (umax[v0] == umax[v0 + 1])
+        {
             ++v0;
+        }
         umax[v] = v0;
         ++v0;
     }
@@ -1656,7 +1660,7 @@ int ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoin
         computeDescriptors(workingMat,  // 高斯模糊之后的图层图像
                            keypoints,   // 当前图层中的特征点集合
                            desc,        // 存储计算之后的描述子
-                           pattern);    // 随机采样点集
+                           pattern_);   // 随机采样点集
 
         // 更新偏移量的值
         offset += nkeypointsLevel;
@@ -1707,6 +1711,7 @@ void ORBextractor::ComputePyramid(cv::Mat image)
         Size  sz(cvRound((float)image.cols * scale), cvRound((float)image.rows * scale));
         Size  wholeSize(sz.width + EDGE_THRESHOLD * 2, sz.height + EDGE_THRESHOLD * 2);
         Mat   temp(wholeSize, image.type()), masktemp;
+        // 这里=是深拷贝, 但是copyMakeBorder会有浅拷贝的效果
         mvImagePyramid[level] = temp(Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, sz.width, sz.height));
 
         // Compute the resized image

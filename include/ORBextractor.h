@@ -103,7 +103,7 @@ protected:
                                                 const int& level);
 
     void                   ComputeKeyPointsOld(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
-    std::vector<cv::Point> pattern;
+    std::vector<cv::Point> pattern_;
 
     int    nfeatures;
     double scaleFactor;
