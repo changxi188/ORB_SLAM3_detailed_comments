@@ -1,8 +1,9 @@
 /**
  * This file is part of ORB-SLAM3
  *
- * Copyright (C) 2017-2021 Carlos Campos, Richard Elvira, Juan J. Gómez Rodríguez, José M.M. Montiel and Juan D. Tardós, University of Zaragoza.
- * Copyright (C) 2014-2016 Raúl Mur-Artal, José M.M. Montiel and Juan D. Tardós, University of Zaragoza.
+ * Copyright (C) 2017-2021 Carlos Campos, Richard Elvira, Juan J. Gómez Rodríguez, José M.M. Montiel and Juan D. Tardós,
+ * University of Zaragoza. Copyright (C) 2014-2016 Raúl Mur-Artal, José M.M. Montiel and Juan D. Tardós, University of
+ * Zaragoza.
  *
  * ORB-SLAM3 is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
  * License as published by the Free Software Foundation, either version 3 of the License, or
@@ -20,7 +21,7 @@
 
 namespace ORB_SLAM3
 {
-bool EdgeSE3ProjectXYZOnlyPose::read(std::istream &is)
+bool EdgeSE3ProjectXYZOnlyPose::read(std::istream& is)
 {
     for (int i = 0; i < 2; i++)
     {
@@ -36,9 +37,8 @@ bool EdgeSE3ProjectXYZOnlyPose::read(std::istream &is)
     return true;
 }
 
-bool EdgeSE3ProjectXYZOnlyPose::write(std::ostream &os) const
+bool EdgeSE3ProjectXYZOnlyPose::write(std::ostream& os) const
 {
-
     for (int i = 0; i < 2; i++)
     {
         os << measurement()[i] << " ";
@@ -57,22 +57,20 @@ bool EdgeSE3ProjectXYZOnlyPose::write(std::ostream &os) const
  */
 void EdgeSE3ProjectXYZOnlyPose::linearizeOplus()
 {
-    g2o::VertexSE3Expmap *vi = static_cast<g2o::VertexSE3Expmap *>(_vertices[0]);
-    Eigen::Vector3d xyz_trans = vi->estimate().map(Xw);
+    g2o::VertexSE3Expmap* vi        = static_cast<g2o::VertexSE3Expmap*>(_vertices[0]);
+    Eigen::Vector3d       xyz_trans = vi->estimate().map(Xw);
 
     double x = xyz_trans[0];
     double y = xyz_trans[1];
     double z = xyz_trans[2];
 
     Eigen::Matrix<double, 3, 6> SE3deriv;
-    SE3deriv << 0.f, z, -y, 1.f, 0.f, 0.f,
-        -z, 0.f, x, 0.f, 1.f, 0.f,
-        y, -x, 0.f, 0.f, 0.f, 1.f;
+    SE3deriv << 0.f, z, -y, 1.f, 0.f, 0.f, -z, 0.f, x, 0.f, 1.f, 0.f, y, -x, 0.f, 0.f, 0.f, 1.f;
 
     _jacobianOplusXi = -pCamera->projectJac(xyz_trans) * SE3deriv;
 }
 
-bool EdgeSE3ProjectXYZOnlyPoseToBody::read(std::istream &is)
+bool EdgeSE3ProjectXYZOnlyPoseToBody::read(std::istream& is)
 {
     for (int i = 0; i < 2; i++)
     {
@@ -88,9 +86,8 @@ bool EdgeSE3ProjectXYZOnlyPoseToBody::read(std::istream &is)
     return true;
 }
 
-bool EdgeSE3ProjectXYZOnlyPoseToBody::write(std::ostream &os) const
+bool EdgeSE3ProjectXYZOnlyPoseToBody::write(std::ostream& os) const
 {
-
     for (int i = 0; i < 2; i++)
     {
         os << measurement()[i] << " ";
@@ -110,19 +107,17 @@ bool EdgeSE3ProjectXYZOnlyPoseToBody::write(std::ostream &os) const
 void EdgeSE3ProjectXYZOnlyPoseToBody::linearizeOplus()
 {
     // 获得三维点在右相机坐标系下的坐标
-    g2o::VertexSE3Expmap *vi = static_cast<g2o::VertexSE3Expmap *>(_vertices[0]);
-    g2o::SE3Quat T_lw(vi->estimate());
-    Eigen::Vector3d X_l = T_lw.map(Xw);
-    Eigen::Vector3d X_r = mTrl.map(T_lw.map(Xw));
+    g2o::VertexSE3Expmap* vi = static_cast<g2o::VertexSE3Expmap*>(_vertices[0]);
+    g2o::SE3Quat          T_lw(vi->estimate());
+    Eigen::Vector3d       X_l = T_lw.map(Xw);
+    Eigen::Vector3d       X_r = mTrl.map(T_lw.map(Xw));
 
     double x_w = X_l[0];
     double y_w = X_l[1];
     double z_w = X_l[2];
 
     Eigen::Matrix<double, 3, 6> SE3deriv;
-    SE3deriv << 0.f, z_w, -y_w, 1.f, 0.f, 0.f,
-        -z_w, 0.f, x_w, 0.f, 1.f, 0.f,
-        y_w, -x_w, 0.f, 0.f, 0.f, 1.f;
+    SE3deriv << 0.f, z_w, -y_w, 1.f, 0.f, 0.f, -z_w, 0.f, x_w, 0.f, 1.f, 0.f, y_w, -x_w, 0.f, 0.f, 0.f, 1.f;
 
     /*
     注意这里是对李代数求导，ρlw != tlw 所以不能使用Pl = Rlw*Pw + tlw
@@ -133,11 +128,12 @@ void EdgeSE3ProjectXYZOnlyPoseToBody::linearizeOplus()
     _jacobianOplusXi = -pCamera->projectJac(X_r) * mTrl.rotation().toRotationMatrix() * SE3deriv;
 }
 
-EdgeSE3ProjectXYZ::EdgeSE3ProjectXYZ() : BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSBAPointXYZ, g2o::VertexSE3Expmap>()
+EdgeSE3ProjectXYZ::EdgeSE3ProjectXYZ()
+  : BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSBAPointXYZ, g2o::VertexSE3Expmap>()
 {
 }
 
-bool EdgeSE3ProjectXYZ::read(std::istream &is)
+bool EdgeSE3ProjectXYZ::read(std::istream& is)
 {
     for (int i = 0; i < 2; i++)
     {
@@ -153,9 +149,8 @@ bool EdgeSE3ProjectXYZ::read(std::istream &is)
     return true;
 }
 
-bool EdgeSE3ProjectXYZ::write(std::ostream &os) const
+bool EdgeSE3ProjectXYZ::write(std::ostream& os) const
 {
-
     for (int i = 0; i < 2; i++)
     {
         os << measurement()[i] << " ";
@@ -170,15 +165,16 @@ bool EdgeSE3ProjectXYZ::write(std::ostream &os) const
 }
 
 /**
- * @brief 求解二维像素坐标关于位姿的雅克比矩阵 _jacobianOplusXj  二维像素坐标关于三维点世界坐标的雅克比矩阵 _jacobianOplusXi
+ * @brief 求解二维像素坐标关于位姿的雅克比矩阵 _jacobianOplusXj  二维像素坐标关于三维点世界坐标的雅克比矩阵
+ * _jacobianOplusXi
  */
 void EdgeSE3ProjectXYZ::linearizeOplus()
 {
-    g2o::VertexSE3Expmap *vj = static_cast<g2o::VertexSE3Expmap *>(_vertices[1]);
-    g2o::SE3Quat T(vj->estimate());
-    g2o::VertexSBAPointXYZ *vi = static_cast<g2o::VertexSBAPointXYZ *>(_vertices[0]);
-    Eigen::Vector3d xyz = vi->estimate();
-    Eigen::Vector3d xyz_trans = T.map(xyz);
+    g2o::VertexSE3Expmap*   vj = static_cast<g2o::VertexSE3Expmap*>(_vertices[1]);
+    g2o::SE3Quat            T(vj->estimate());
+    g2o::VertexSBAPointXYZ* vi        = static_cast<g2o::VertexSBAPointXYZ*>(_vertices[0]);
+    Eigen::Vector3d         xyz       = vi->estimate();
+    Eigen::Vector3d         xyz_trans = T.map(xyz);
 
     double x = xyz_trans[0];
     double y = xyz_trans[1];
@@ -189,18 +185,25 @@ void EdgeSE3ProjectXYZ::linearizeOplus()
     _jacobianOplusXi = projectJac * T.rotation().toRotationMatrix();
 
     Eigen::Matrix<double, 3, 6> SE3deriv;
-    SE3deriv << 0.f,   z,  -y, 1.f, 0.f, 0.f,
-                 -z, 0.f,   x, 0.f, 1.f, 0.f,
-                  y,  -x, 0.f, 0.f, 0.f, 1.f;
+
+    // todo: changxicheng 这里的雅可比和joan Sola给出的不一样，难道是因为这里是左乘而joan Sola是右乘？
+    // 确实是左右乘的原因，详细推导如下链接：
+    // https://blog.csdn.net/weixin_43196818/article/details/127660251
+    // clang-format off
+    SE3deriv << 0.f, z, -y, 1.f, 0.f, 0.f,
+                -z, 0.f, x, 0.f, 1.f, 0.f,
+                y, -x, 0.f, 0.f, 0.f, 1.f;
+    // clang-format on
 
     _jacobianOplusXj = projectJac * SE3deriv;
 }
 
-EdgeSE3ProjectXYZToBody::EdgeSE3ProjectXYZToBody() : BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSBAPointXYZ, g2o::VertexSE3Expmap>()
+EdgeSE3ProjectXYZToBody::EdgeSE3ProjectXYZToBody()
+  : BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSBAPointXYZ, g2o::VertexSE3Expmap>()
 {
 }
 
-bool EdgeSE3ProjectXYZToBody::read(std::istream &is)
+bool EdgeSE3ProjectXYZToBody::read(std::istream& is)
 {
     for (int i = 0; i < 2; i++)
     {
@@ -216,9 +219,8 @@ bool EdgeSE3ProjectXYZToBody::read(std::istream &is)
     return true;
 }
 
-bool EdgeSE3ProjectXYZToBody::write(std::ostream &os) const
+bool EdgeSE3ProjectXYZToBody::write(std::ostream& os) const
 {
-
     for (int i = 0; i < 2; i++)
     {
         os << measurement()[i] << " ";
@@ -233,17 +235,18 @@ bool EdgeSE3ProjectXYZToBody::write(std::ostream &os) const
 }
 
 /**
- * @brief 求解右目二维像素坐标关于位姿的雅克比矩阵 _jacobianOplusXj  右目二维像素坐标关于三维点世界坐标的雅克比矩阵 _jacobianOplusXi
+ * @brief 求解右目二维像素坐标关于位姿的雅克比矩阵 _jacobianOplusXj  右目二维像素坐标关于三维点世界坐标的雅克比矩阵
+ * _jacobianOplusXi
  */
 void EdgeSE3ProjectXYZToBody::linearizeOplus()
 {
-    g2o::VertexSE3Expmap *vj = static_cast<g2o::VertexSE3Expmap *>(_vertices[1]);
-    g2o::SE3Quat T_lw(vj->estimate());
-    g2o::SE3Quat T_rw = mTrl * T_lw;
-    g2o::VertexSBAPointXYZ *vi = static_cast<g2o::VertexSBAPointXYZ *>(_vertices[0]);
-    Eigen::Vector3d X_w = vi->estimate();
-    Eigen::Vector3d X_l = T_lw.map(X_w);
-    Eigen::Vector3d X_r = mTrl.map(T_lw.map(X_w));
+    g2o::VertexSE3Expmap*   vj = static_cast<g2o::VertexSE3Expmap*>(_vertices[1]);
+    g2o::SE3Quat            T_lw(vj->estimate());
+    g2o::SE3Quat            T_rw = mTrl * T_lw;
+    g2o::VertexSBAPointXYZ* vi   = static_cast<g2o::VertexSBAPointXYZ*>(_vertices[0]);
+    Eigen::Vector3d         X_w  = vi->estimate();
+    Eigen::Vector3d         X_l  = T_lw.map(X_w);
+    Eigen::Vector3d         X_r  = mTrl.map(T_lw.map(X_w));
 
     _jacobianOplusXi = -pCamera->projectJac(X_r) * T_rw.rotation().toRotationMatrix();
 
@@ -252,9 +255,7 @@ void EdgeSE3ProjectXYZToBody::linearizeOplus()
     double z = X_l[2];
 
     Eigen::Matrix<double, 3, 6> SE3deriv;
-    SE3deriv << 0.f,   z,  -y, 1.f, 0.f, 0.f,
-                 -z, 0.f,   x, 0.f, 1.f, 0.f,
-                  y,  -x, 0.f, 0.f, 0.f, 1.f;
+    SE3deriv << 0.f, z, -y, 1.f, 0.f, 0.f, -z, 0.f, x, 0.f, 1.f, 0.f, y, -x, 0.f, 0.f, 0.f, 1.f;
     /*
         注意这里是对李代数求导，ρlw != tlw 所以不能使用Pl = Rlw*Pw + tlw
         Pl = EXP(ξlw)*Pw    Pr = Rrl * EXP(ξlw) * Pw + trl
@@ -267,10 +268,10 @@ void EdgeSE3ProjectXYZToBody::linearizeOplus()
 VertexSim3Expmap::VertexSim3Expmap() : BaseVertex<7, g2o::Sim3>()
 {
     _marginalized = false;
-    _fix_scale = false;
+    _fix_scale    = false;
 }
 
-bool VertexSim3Expmap::read(std::istream &is)
+bool VertexSim3Expmap::read(std::istream& is)
 {
     g2o::Vector7d cam2world;
     for (int i = 0; i < 6; i++)
@@ -296,9 +297,9 @@ bool VertexSim3Expmap::read(std::istream &is)
     return true;
 }
 
-bool VertexSim3Expmap::write(std::ostream &os) const
+bool VertexSim3Expmap::write(std::ostream& os) const
 {
-    g2o::Sim3 cam2world(estimate().inverse());
+    g2o::Sim3     cam2world(estimate().inverse());
     g2o::Vector7d lv = cam2world.log();
     for (int i = 0; i < 7; i++)
     {
@@ -318,47 +319,12 @@ bool VertexSim3Expmap::write(std::ostream &os) const
     return os.good();
 }
 
-EdgeSim3ProjectXYZ::EdgeSim3ProjectXYZ() : g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSBAPointXYZ, VertexSim3Expmap>()
+EdgeSim3ProjectXYZ::EdgeSim3ProjectXYZ()
+  : g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSBAPointXYZ, VertexSim3Expmap>()
 {
 }
 
-bool EdgeSim3ProjectXYZ::read(std::istream &is)
-{
-    for (int i = 0; i < 2; i++)
-    {
-        is >> _measurement[i];
-    }
-
-    for (int i = 0; i < 2; i++)
-        for (int j = i; j < 2; j++)
-        {
-            is >> information()(i, j);
-            if (i != j)
-                information()(j, i) = information()(i, j);
-        }
-    return true;
-}
-
-bool EdgeSim3ProjectXYZ::write(std::ostream &os) const
-{
-    for (int i = 0; i < 2; i++)
-    {
-        os << _measurement[i] << " ";
-    }
-
-    for (int i = 0; i < 2; i++)
-        for (int j = i; j < 2; j++)
-        {
-            os << " " << information()(i, j);
-        }
-    return os.good();
-}
-
-EdgeInverseSim3ProjectXYZ::EdgeInverseSim3ProjectXYZ() : g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSBAPointXYZ, VertexSim3Expmap>()
-{
-}
-
-bool EdgeInverseSim3ProjectXYZ::read(std::istream &is)
+bool EdgeSim3ProjectXYZ::read(std::istream& is)
 {
     for (int i = 0; i < 2; i++)
     {
@@ -375,7 +341,7 @@ bool EdgeInverseSim3ProjectXYZ::read(std::istream &is)
     return true;
 }
 
-bool EdgeInverseSim3ProjectXYZ::write(std::ostream &os) const
+bool EdgeSim3ProjectXYZ::write(std::ostream& os) const
 {
     for (int i = 0; i < 2; i++)
     {
@@ -390,4 +356,41 @@ bool EdgeInverseSim3ProjectXYZ::write(std::ostream &os) const
     return os.good();
 }
 
+EdgeInverseSim3ProjectXYZ::EdgeInverseSim3ProjectXYZ()
+  : g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSBAPointXYZ, VertexSim3Expmap>()
+{
 }
+
+bool EdgeInverseSim3ProjectXYZ::read(std::istream& is)
+{
+    for (int i = 0; i < 2; i++)
+    {
+        is >> _measurement[i];
+    }
+
+    for (int i = 0; i < 2; i++)
+        for (int j = i; j < 2; j++)
+        {
+            is >> information()(i, j);
+            if (i != j)
+                information()(j, i) = information()(i, j);
+        }
+    return true;
+}
+
+bool EdgeInverseSim3ProjectXYZ::write(std::ostream& os) const
+{
+    for (int i = 0; i < 2; i++)
+    {
+        os << _measurement[i] << " ";
+    }
+
+    for (int i = 0; i < 2; i++)
+        for (int j = i; j < 2; j++)
+        {
+            os << " " << information()(i, j);
+        }
+    return os.good();
+}
+
+}  // namespace ORB_SLAM3

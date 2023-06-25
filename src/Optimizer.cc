@@ -2895,7 +2895,9 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame*>& vpKFs, const vector<Ma
         KeyFrame* pKF = vpKFs[i];
         // 去除无效的
         if (pKF->isBad())
+        {
             continue;
+        }
 
         // 对于每一个能用的关键帧构造SE3顶点,其实就是当前关键帧的位姿
         g2o::VertexSE3Expmap* vSE3 = new g2o::VertexSE3Expmap();
@@ -2907,7 +2909,9 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame*>& vpKFs, const vector<Ma
         // 向优化器中添加顶点，并且更新maxKFid
         optimizer.addVertex(vSE3);
         if (pKF->mnId > maxKFid)
+        {
             maxKFid = pKF->mnId;
+        }
     }
 
     // 卡方分布 95% 以上可信度的时候的阈值

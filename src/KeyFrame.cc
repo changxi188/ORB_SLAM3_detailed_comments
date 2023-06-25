@@ -575,10 +575,14 @@ void KeyFrame::UpdateConnections(bool upParent)
         MapPoint* pMP = *vit;
 
         if (!pMP)
+        {
             continue;
+        }
 
         if (pMP->isBad())
+        {
             continue;
+        }
 
         // 对于每一个MapPoint点，observations记录了可以观测到该MapPoint的所有关键帧
         map<KeyFrame*, tuple<int, int>> observations = pMP->GetObservations();
@@ -603,7 +607,7 @@ void KeyFrame::UpdateConnections(bool upParent)
     // If the counter is greater than threshold add connection
     // In case no keyframe counter is over threshold add the one with maximum counter
     int       nmax   = 0;
-    KeyFrame* pKFmax = NULL;
+    KeyFrame* pKFmax = nullptr;
     // 至少有15个共视地图点
     int th = 15;
 
@@ -995,10 +999,11 @@ vector<size_t> KeyFrame::GetFeaturesInArea(const float& x, const float& y, const
             const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
             for (size_t j = 0, jend = vCell.size(); j < jend; j++)
             {
-                const cv::KeyPoint& kpUn =
-                    (NLeft == -1) ? mvKeysUn[vCell[j]] : (!bRight) ? mvKeys[vCell[j]] : mvKeysRight[vCell[j]];
-                const float distx = kpUn.pt.x - x;
-                const float disty = kpUn.pt.y - y;
+                const cv::KeyPoint& kpUn  = (NLeft == -1) ? mvKeysUn[vCell[j]] :
+                                            (!bRight)     ? mvKeys[vCell[j]] :
+                                                            mvKeysRight[vCell[j]];
+                const float         distx = kpUn.pt.x - x;
+                const float         disty = kpUn.pt.y - y;
 
                 if (fabs(distx) < r && fabs(disty) < r)
                     vIndices.push_back(vCell[j]);

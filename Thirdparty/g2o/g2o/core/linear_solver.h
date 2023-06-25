@@ -29,7 +29,8 @@
 #include "sparse_block_matrix.h"
 #include "sparse_block_matrix_ccs.h"
 
-namespace g2o {
+namespace g2o
+{
 
 /**
  * \brief basic solver for Ax = b
@@ -40,9 +41,14 @@ namespace g2o {
 template <typename MatrixType>
 class LinearSolver
 {
-  public:
-    LinearSolver() {};
-    virtual ~LinearSolver() {}
+public:
+    LinearSolver()
+    {
+    }
+
+    virtual ~LinearSolver()
+    {
+    }
 
     /**
      * init for operating on matrices with a different non-zero pattern like before
@@ -61,23 +67,34 @@ class LinearSolver
      * Inverts the diagonal blocks of A
      * @returns false if not defined.
      */
-    virtual bool solveBlocks(double**&blocks, const SparseBlockMatrix<MatrixType>& A) { (void)blocks; (void) A; return false; }
-
+    virtual bool solveBlocks(double**& blocks, const SparseBlockMatrix<MatrixType>& A)
+    {
+        (void)blocks;
+        (void)A;
+        return false;
+    }
 
     /**
      * Inverts the a block pattern of A in spinv
      * @returns false if not defined.
      */
-    virtual bool solvePattern(SparseBlockMatrix<MatrixXd>& spinv, const std::vector<std::pair<int, int> >& blockIndices, const SparseBlockMatrix<MatrixType>& A){
-      (void) spinv;
-      (void) blockIndices;
-      (void) A;
-      return false;
+    virtual bool solvePattern(SparseBlockMatrix<MatrixXd>& spinv, const std::vector<std::pair<int, int> >& blockIndices,
+                              const SparseBlockMatrix<MatrixType>& A)
+    {
+        (void)spinv;
+        (void)blockIndices;
+        (void)A;
+        return false;
     }
 
     //! write a debug dump of the system matrix if it is not PSD in solve
-    virtual bool writeDebug() const { return false;}
-    virtual void setWriteDebug(bool) {}
+    virtual bool writeDebug() const
+    {
+        return false;
+    }
+    virtual void setWriteDebug(bool)
+    {
+    }
 };
 
 /**
@@ -86,24 +103,26 @@ class LinearSolver
 template <typename MatrixType>
 class LinearSolverCCS : public LinearSolver<MatrixType>
 {
-  public:
-    LinearSolverCCS() : LinearSolver<MatrixType>(), _ccsMatrix(0) {}
+public:
+    LinearSolverCCS() : LinearSolver<MatrixType>(), _ccsMatrix(0)
+    {
+    }
     ~LinearSolverCCS()
     {
-      delete _ccsMatrix;
+        delete _ccsMatrix;
     }
 
-  protected:
+protected:
     SparseBlockMatrixCCS<MatrixType>* _ccsMatrix;
 
     void initMatrixStructure(const SparseBlockMatrix<MatrixType>& A)
     {
-      delete _ccsMatrix;
-      _ccsMatrix = new SparseBlockMatrixCCS<MatrixType>(A.rowBlockIndices(), A.colBlockIndices());
-      A.fillSparseBlockMatrixCCS(*_ccsMatrix);
+        delete _ccsMatrix;
+        _ccsMatrix = new SparseBlockMatrixCCS<MatrixType>(A.rowBlockIndices(), A.colBlockIndices());
+        A.fillSparseBlockMatrixCCS(*_ccsMatrix);
     }
 };
 
-} // end namespace
+}  // namespace g2o
 
 #endif

@@ -24,33 +24,34 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "types_sba.h"
 #include <iostream>
+#include "types_sba.h"
 
-namespace g2o {
+namespace g2o
+{
 
-  using namespace std;
+using namespace std;
 
+VertexSBAPointXYZ::VertexSBAPointXYZ() : BaseVertex<3, Vector3d>()
+{
+}
 
-  VertexSBAPointXYZ::VertexSBAPointXYZ() : BaseVertex<3, Vector3d>()
-  {
-  }
-
-  bool VertexSBAPointXYZ::read(std::istream& is)
-  {
+bool VertexSBAPointXYZ::read(std::istream& is)
+{
     Vector3d lv;
-    for (int i=0; i<3; i++)
-      is >> _estimate[i];
+    for (int i = 0; i < 3; i++)
+        is >> _estimate[i];
     return true;
-  }
+}
 
-  bool VertexSBAPointXYZ::write(std::ostream& os) const
-  {
-    Vector3d lv=estimate();
-    for (int i=0; i<3; i++){
-      os << lv[i] << " ";
+bool VertexSBAPointXYZ::write(std::ostream& os) const
+{
+    Vector3d lv = estimate();
+    for (int i = 0; i < 3; i++)
+    {
+        os << lv[i] << " ";
     }
     return os.good();
-  }
+}
 
-} // end namespace
+}  // namespace g2o
