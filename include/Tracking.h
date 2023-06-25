@@ -143,7 +143,8 @@ public:
     cv::Mat mImGray;
 
     // Initialization Variables (Monocular)
-    std::vector<int>         mvIniLastMatches;
+    std::vector<int> mvIniLastMatches;
+    // 在初始化阶段匹配点(1->2)
     std::vector<int>         mvIniMatches;
     std::vector<cv::Point2f> mvbPrevMatched;
     std::vector<cv::Point3f> mvIniP3D;

@@ -1,8 +1,9 @@
 /**
  * This file is part of ORB-SLAM3
  *
- * Copyright (C) 2017-2021 Carlos Campos, Richard Elvira, Juan J. Gómez Rodríguez, José M.M. Montiel and Juan D. Tardós, University of Zaragoza.
- * Copyright (C) 2014-2016 Raúl Mur-Artal, José M.M. Montiel and Juan D. Tardós, University of Zaragoza.
+ * Copyright (C) 2017-2021 Carlos Campos, Richard Elvira, Juan J. Gómez Rodríguez, José M.M. Montiel and Juan D. Tardós,
+ * University of Zaragoza. Copyright (C) 2014-2016 Raúl Mur-Artal, José M.M. Montiel and Juan D. Tardós, University of
+ * Zaragoza.
  *
  * ORB-SLAM3 is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
  * License as published by the Free Software Foundation, either version 3 of the License, or
@@ -28,16 +29,16 @@
 using namespace std;
 namespace ORB_SLAM3
 {
-TwoViewReconstruction::TwoViewReconstruction(const Eigen::Matrix3f &k, float sigma, int iterations)
+TwoViewReconstruction::TwoViewReconstruction(const Eigen::Matrix3f& k, float sigma, int iterations)
 {
     mK = k;
 
-    mSigma = sigma;
-    mSigma2 = sigma * sigma;
+    mSigma         = sigma;
+    mSigma2        = sigma * sigma;
     mMaxIterations = iterations;
 }
 
-/** 
+/**
  * @brief 单目初始化重要的环节，先获得rt在通过三角化恢复3d点坐标
  * @param vKeys1 第一帧的关键点
  * @param vKeys2 第二帧的关键点
@@ -46,9 +47,9 @@ TwoViewReconstruction::TwoViewReconstruction(const Eigen::Matrix3f &k, float sig
  * @param vP3D 恢复出的三维点
  * @param vbTriangulated 是否三角化成功，用于统计匹配点数量
  */
-bool TwoViewReconstruction::Reconstruct(
-    const std::vector<cv::KeyPoint> &vKeys1, const std::vector<cv::KeyPoint> &vKeys2, const vector<int> &vMatches12,
-    Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated)
+bool TwoViewReconstruction::Reconstruct(const std::vector<cv::KeyPoint>& vKeys1,
+                                        const std::vector<cv::KeyPoint>& vKeys2, const vector<int>& vMatches12,
+                                        Sophus::SE3f& T21, vector<cv::Point3f>& vP3D, vector<bool>& vbTriangulated)
 {
     // 1. 准备工作，提取匹配关系及准备RANSAC
     mvKeys1.clear();
@@ -104,7 +105,7 @@ bool TwoViewReconstruction::Reconstruct(
         for (size_t j = 0; j < 8; j++)
         {
             int randi = DUtils::Random::RandomInt(0, vAvailableIndices.size() - 1);
-            int idx = vAvailableIndices[randi];  // 这句不多余，防止重复选择
+            int idx   = vAvailableIndices[randi];  // 这句不多余，防止重复选择
 
             mvSets[it][j] = idx;
 
@@ -115,8 +116,8 @@ bool TwoViewReconstruction::Reconstruct(
     }
 
     // Launch threads to compute in parallel a fundamental matrix and a homography
-    vector<bool> vbMatchesInliersH, vbMatchesInliersF;
-    float SH, SF;
+    vector<bool>    vbMatchesInliersH, vbMatchesInliersF;
+    float           SH, SF;
     Eigen::Matrix3f H, F;
 
     // 3. 双线程分别计算
@@ -138,25 +139,25 @@ bool TwoViewReconstruction::Reconstruct(
     // Try to reconstruct from homography or fundamental depending on the ratio (0.40-0.45)
     // 4. 看哪个分高用哪个，分别是通过H重建与通过F重建
     // ORBSLAM2这里的值是0.4， TOSEE
-    if (RH > 0.50) // if(RH>0.40)
+    if (RH > 0.50)  // if(RH>0.40)
     {
         // cout << "Initialization from Homography" << endl;
         return ReconstructH(vbMatchesInliersH, H, mK, T21, vP3D, vbTriangulated, minParallax, 50);
     }
-    else // if(pF_HF>0.6)
+    else  // if(pF_HF>0.6)
     {
         // cout << "Initialization from Fundamental" << endl;
         return ReconstructF(vbMatchesInliersF, F, mK, T21, vP3D, vbTriangulated, minParallax, 50);
     }
 }
 
-/** 
+/**
  * @brief 计算H矩阵，同时计算得分与内点
  * @param vbMatchesInliers 经过H矩阵验证，是否为内点，大小为mvMatches12
  * @param score 得分
  * @param H21 1到2的H矩阵
  */
-void TwoViewReconstruction::FindHomography(vector<bool> &vbMatchesInliers, float &score, Eigen::Matrix3f &H21)
+void TwoViewReconstruction::FindHomography(vector<bool>& vbMatchesInliers, float& score, Eigen::Matrix3f& H21)
 {
     // Number of putative matches
     // 匹配成功的个数
@@ -164,22 +165,22 @@ void TwoViewReconstruction::FindHomography(vector<bool> &vbMatchesInliers, float
 
     // Normalize coordinates
     vector<cv::Point2f> vPn1, vPn2;
-    Eigen::Matrix3f T1, T2;
+    Eigen::Matrix3f     T1, T2;
     // 像素坐标标准化，先去均值，再除均长
     Normalize(mvKeys1, vPn1, T1);
     Normalize(mvKeys2, vPn2, T2);
     Eigen::Matrix3f T2inv = T2.inverse();
 
     // Best Results variables
-    score = 0.0;
+    score            = 0.0;
     vbMatchesInliers = vector<bool>(N, false);
 
     // Iteration variables
     vector<cv::Point2f> vPn1i(8);
     vector<cv::Point2f> vPn2i(8);
-    Eigen::Matrix3f H21i, H12i;
-    vector<bool> vbCurrentInliers(N, false);
-    float currentScore;
+    Eigen::Matrix3f     H21i, H12i;
+    vector<bool>        vbCurrentInliers(N, false);
+    float               currentScore;
 
     // Perform all RANSAC iterations and save the solution with highest score
     // 计算归一化后的H矩阵 p2 = H21*p1
@@ -203,41 +204,41 @@ void TwoViewReconstruction::FindHomography(vector<bool> &vbMatchesInliers, float
 
         if (currentScore > score)
         {
-            H21 = H21i;
+            H21              = H21i;
             vbMatchesInliers = vbCurrentInliers;
-            score = currentScore;
+            score            = currentScore;
         }
     }
 }
 
-/** 
+/**
  * @brief 计算F矩阵，同时计算得分与内点
  * @param vbMatchesInliers 经过F矩阵验证，是否为内点，大小为mvMatches12
  * @param score 得分
  * @param F21 1到2的F矩阵
  */
-void TwoViewReconstruction::FindFundamental(vector<bool> &vbMatchesInliers, float &score, Eigen::Matrix3f &F21)
+void TwoViewReconstruction::FindFundamental(vector<bool>& vbMatchesInliers, float& score, Eigen::Matrix3f& F21)
 {
     // Number of putative matches
     const int N = vbMatchesInliers.size();
 
     // Normalize coordinates
     vector<cv::Point2f> vPn1, vPn2;
-    Eigen::Matrix3f T1, T2;
+    Eigen::Matrix3f     T1, T2;
     Normalize(mvKeys1, vPn1, T1);
     Normalize(mvKeys2, vPn2, T2);
     Eigen::Matrix3f T2t = T2.transpose();
 
     // Best Results variables
-    score = 0.0;
+    score            = 0.0;
     vbMatchesInliers = vector<bool>(N, false);
 
     // Iteration variables
     vector<cv::Point2f> vPn1i(8);
     vector<cv::Point2f> vPn2i(8);
-    Eigen::Matrix3f F21i;
-    vector<bool> vbCurrentInliers(N, false);
-    float currentScore;
+    Eigen::Matrix3f     F21i;
+    vector<bool>        vbCurrentInliers(N, false);
+    float               currentScore;
 
     // Perform all RANSAC iterations and save the solution with highest score
     for (int it = 0; it < mMaxIterations; it++)
@@ -260,9 +261,9 @@ void TwoViewReconstruction::FindFundamental(vector<bool> &vbMatchesInliers, floa
 
         if (currentScore > score)
         {
-            F21 = F21i;
+            F21              = F21i;
             vbMatchesInliers = vbCurrentInliers;
-            score = currentScore;
+            score            = currentScore;
         }
     }
 }
@@ -284,7 +285,7 @@ void TwoViewReconstruction::FindFundamental(vector<bool> &vbMatchesInliers, floa
  * @return     单应矩阵
  * @see        Multiple View Geometry in Computer Vision - Algorithm 4.2 p109
  */
-Eigen::Matrix3f TwoViewReconstruction::ComputeH21(const vector<cv::Point2f> &vP1, const vector<cv::Point2f> &vP2)
+Eigen::Matrix3f TwoViewReconstruction::ComputeH21(const vector<cv::Point2f>& vP1, const vector<cv::Point2f>& vP2)
 {
     const int N = vP1.size();
 
@@ -335,7 +336,7 @@ Eigen::Matrix3f TwoViewReconstruction::ComputeH21(const vector<cv::Point2f> &vP1
  * @return     基础矩阵
  * @see        Multiple View Geometry in Computer Vision - Algorithm 11.1 p282 (中文版 p191)
  */
-Eigen::Matrix3f TwoViewReconstruction::ComputeF21(const vector<cv::Point2f> &vP1, const vector<cv::Point2f> &vP2)
+Eigen::Matrix3f TwoViewReconstruction::ComputeF21(const vector<cv::Point2f>& vP1, const vector<cv::Point2f>& vP2)
 {
     const int N = vP1.size();
 
@@ -372,14 +373,15 @@ Eigen::Matrix3f TwoViewReconstruction::ComputeF21(const vector<cv::Point2f> &vP1
     return svd2.matrixU() * Eigen::DiagonalMatrix<float, 3>(w) * svd2.matrixV().transpose();
 }
 
-/** 
+/**
  * @brief 检查结果
  * @param H21 顾名思义
  * @param H12 顾名思义
  * @param vbMatchesInliers 匹配是否合法，大小为mvMatches12
  * @param sigma 默认为1
  */
-float TwoViewReconstruction::CheckHomography(const Eigen::Matrix3f &H21, const Eigen::Matrix3f &H12, vector<bool> &vbMatchesInliers, float sigma)
+float TwoViewReconstruction::CheckHomography(const Eigen::Matrix3f& H21, const Eigen::Matrix3f& H12,
+                                             vector<bool>& vbMatchesInliers, float sigma)
 {
     const int N = mvMatches12.size();
 
@@ -415,8 +417,8 @@ float TwoViewReconstruction::CheckHomography(const Eigen::Matrix3f &H21, const E
     {
         bool bIn = true;
 
-        const cv::KeyPoint &kp1 = mvKeys1[mvMatches12[i].first];
-        const cv::KeyPoint &kp2 = mvKeys2[mvMatches12[i].second];
+        const cv::KeyPoint& kp1 = mvKeys1[mvMatches12[i].first];
+        const cv::KeyPoint& kp2 = mvKeys2[mvMatches12[i].second];
 
         const float u1 = kp1.pt.x;
         const float v1 = kp1.pt.y;
@@ -426,10 +428,11 @@ float TwoViewReconstruction::CheckHomography(const Eigen::Matrix3f &H21, const E
         // Reprojection error in first image
         // x2in1 = H12*x2
 
-        // 计算投影误差，2投1 1投2这么做，计算累计的卡方检验分数，分数越高证明内点与误差越优，这么做为了平衡误差与内点个数，不是说内点个数越高越好，也不是说误差越小越好
+        // 计算投影误差，2投1
+        // 1投2这么做，计算累计的卡方检验分数，分数越高证明内点与误差越优，这么做为了平衡误差与内点个数，不是说内点个数越高越好，也不是说误差越小越好
         const float w2in1inv = 1.0 / (h31inv * u2 + h32inv * v2 + h33inv);
-        const float u2in1 = (h11inv * u2 + h12inv * v2 + h13inv) * w2in1inv;
-        const float v2in1 = (h21inv * u2 + h22inv * v2 + h23inv) * w2in1inv;
+        const float u2in1    = (h11inv * u2 + h12inv * v2 + h13inv) * w2in1inv;
+        const float v2in1    = (h21inv * u2 + h22inv * v2 + h23inv) * w2in1inv;
 
         const float squareDist1 = (u1 - u2in1) * (u1 - u2in1) + (v1 - v2in1) * (v1 - v2in1);
 
@@ -444,8 +447,8 @@ float TwoViewReconstruction::CheckHomography(const Eigen::Matrix3f &H21, const E
         // x1in2 = H21*x1
 
         const float w1in2inv = 1.0 / (h31 * u1 + h32 * v1 + h33);
-        const float u1in2 = (h11 * u1 + h12 * v1 + h13) * w1in2inv;
-        const float v1in2 = (h21 * u1 + h22 * v1 + h23) * w1in2inv;
+        const float u1in2    = (h11 * u1 + h12 * v1 + h13) * w1in2inv;
+        const float v1in2    = (h21 * u1 + h22 * v1 + h23) * w1in2inv;
 
         const float squareDist2 = (u2 - u1in2) * (u2 - u1in2) + (v2 - v1in2) * (v2 - v1in2);
 
@@ -465,13 +468,13 @@ float TwoViewReconstruction::CheckHomography(const Eigen::Matrix3f &H21, const E
     return score;
 }
 
-/** 
+/**
  * @brief 检查结果
  * @param F21 顾名思义
  * @param vbMatchesInliers 匹配是否合法，大小为mvMatches12
  * @param sigma 默认为1
  */
-float TwoViewReconstruction::CheckFundamental(const Eigen::Matrix3f &F21, vector<bool> &vbMatchesInliers, float sigma)
+float TwoViewReconstruction::CheckFundamental(const Eigen::Matrix3f& F21, vector<bool>& vbMatchesInliers, float sigma)
 {
     const int N = mvMatches12.size();
 
@@ -500,8 +503,8 @@ float TwoViewReconstruction::CheckFundamental(const Eigen::Matrix3f &F21, vector
     {
         bool bIn = true;
 
-        const cv::KeyPoint &kp1 = mvKeys1[mvMatches12[i].first];
-        const cv::KeyPoint &kp2 = mvKeys2[mvMatches12[i].second];
+        const cv::KeyPoint& kp1 = mvKeys1[mvMatches12[i].first];
+        const cv::KeyPoint& kp2 = mvKeys2[mvMatches12[i].second];
 
         const float u1 = kp1.pt.x;
         const float v1 = kp1.pt.y;
@@ -555,7 +558,7 @@ float TwoViewReconstruction::CheckFundamental(const Eigen::Matrix3f &F21, vector
     return score;
 }
 
-/** 
+/**
  * @brief 通过基础矩阵重建
  * @param vbMatchesInliers 匹配是否合法，大小为mvMatches12
  * @param F21 顾名思义
@@ -566,9 +569,9 @@ float TwoViewReconstruction::CheckFundamental(const Eigen::Matrix3f &F21, vector
  * @param minParallax 1
  * @param minTriangulated 50
  */
-bool TwoViewReconstruction::ReconstructF(
-    vector<bool> &vbMatchesInliers, Eigen::Matrix3f &F21, Eigen::Matrix3f &K,
-    Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated, float minParallax, int minTriangulated)
+bool TwoViewReconstruction::ReconstructF(vector<bool>& vbMatchesInliers, Eigen::Matrix3f& F21, Eigen::Matrix3f& K,
+                                         Sophus::SE3f& T21, vector<cv::Point3f>& vP3D, vector<bool>& vbTriangulated,
+                                         float minParallax, int minTriangulated)
 {
     // 统计了合法的匹配，后面用于对比重建出的点数
     int N = 0;
@@ -593,13 +596,17 @@ bool TwoViewReconstruction::ReconstructF(
     // Reconstruct with the 4 hyphoteses and check
     // 3. 使用四对结果分别重建
     vector<cv::Point3f> vP3D1, vP3D2, vP3D3, vP3D4;
-    vector<bool> vbTriangulated1, vbTriangulated2, vbTriangulated3, vbTriangulated4;
-    float parallax1, parallax2, parallax3, parallax4;
+    vector<bool>        vbTriangulated1, vbTriangulated2, vbTriangulated3, vbTriangulated4;
+    float               parallax1, parallax2, parallax3, parallax4;
 
-    int nGood1 = CheckRT(R1, t1, mvKeys1, mvKeys2, mvMatches12, vbMatchesInliers, K, vP3D1, 4.0 * mSigma2, vbTriangulated1, parallax1);
-    int nGood2 = CheckRT(R2, t1, mvKeys1, mvKeys2, mvMatches12, vbMatchesInliers, K, vP3D2, 4.0 * mSigma2, vbTriangulated2, parallax2);
-    int nGood3 = CheckRT(R1, t2, mvKeys1, mvKeys2, mvMatches12, vbMatchesInliers, K, vP3D3, 4.0 * mSigma2, vbTriangulated3, parallax3);
-    int nGood4 = CheckRT(R2, t2, mvKeys1, mvKeys2, mvMatches12, vbMatchesInliers, K, vP3D4, 4.0 * mSigma2, vbTriangulated4, parallax4);
+    int nGood1 = CheckRT(R1, t1, mvKeys1, mvKeys2, mvMatches12, vbMatchesInliers, K, vP3D1, 4.0 * mSigma2,
+                         vbTriangulated1, parallax1);
+    int nGood2 = CheckRT(R2, t1, mvKeys1, mvKeys2, mvMatches12, vbMatchesInliers, K, vP3D2, 4.0 * mSigma2,
+                         vbTriangulated2, parallax2);
+    int nGood3 = CheckRT(R1, t2, mvKeys1, mvKeys2, mvMatches12, vbMatchesInliers, K, vP3D3, 4.0 * mSigma2,
+                         vbTriangulated3, parallax3);
+    int nGood4 = CheckRT(R2, t2, mvKeys1, mvKeys2, mvMatches12, vbMatchesInliers, K, vP3D4, 4.0 * mSigma2,
+                         vbTriangulated4, parallax4);
     // 统计重建出点的数量最大值
     int maxGood = max(nGood1, max(nGood2, max(nGood3, nGood4)));
     // 起码要重建出超过百分之90的匹配点
@@ -629,7 +636,7 @@ bool TwoViewReconstruction::ReconstructF(
     {
         if (parallax1 > minParallax)
         {
-            vP3D = vP3D1;
+            vP3D           = vP3D1;
             vbTriangulated = vbTriangulated1;
 
             T21 = Sophus::SE3f(R1, t1);
@@ -640,7 +647,7 @@ bool TwoViewReconstruction::ReconstructF(
     {
         if (parallax2 > minParallax)
         {
-            vP3D = vP3D2;
+            vP3D           = vP3D2;
             vbTriangulated = vbTriangulated2;
 
             T21 = Sophus::SE3f(R2, t1);
@@ -651,7 +658,7 @@ bool TwoViewReconstruction::ReconstructF(
     {
         if (parallax3 > minParallax)
         {
-            vP3D = vP3D3;
+            vP3D           = vP3D3;
             vbTriangulated = vbTriangulated3;
 
             T21 = Sophus::SE3f(R1, t2);
@@ -662,7 +669,7 @@ bool TwoViewReconstruction::ReconstructF(
     {
         if (parallax4 > minParallax)
         {
-            vP3D = vP3D4;
+            vP3D           = vP3D4;
             vbTriangulated = vbTriangulated4;
 
             T21 = Sophus::SE3f(R2, t2);
@@ -673,6 +680,7 @@ bool TwoViewReconstruction::ReconstructF(
     return false;
 }
 
+// clang-format off
 /**
  * @brief 从H恢复R t
  * H矩阵分解常见有两种方法：Faugeras SVD-based decomposition 和 Zhang SVD-based decomposition
@@ -743,9 +751,10 @@ bool TwoViewReconstruction::ReconstructF(
  * @param minParallax 1
  * @param minTriangulated 50
  */
-bool TwoViewReconstruction::ReconstructH(
-    vector<bool> &vbMatchesInliers, Eigen::Matrix3f &H21, Eigen::Matrix3f &K,
-    Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated, float minParallax, int minTriangulated)
+// clang-format on
+bool TwoViewReconstruction::ReconstructH(vector<bool>& vbMatchesInliers, Eigen::Matrix3f& H21, Eigen::Matrix3f& K,
+                                         Sophus::SE3f& T21, vector<cv::Point3f>& vP3D, vector<bool>& vbTriangulated,
+                                         float minParallax, int minTriangulated)
 {
     // 统计了合法的匹配，后面用于对比重建出的点数
     int N = 0;
@@ -759,13 +768,13 @@ bool TwoViewReconstruction::ReconstructH(
     // step1：SVD分解Homography
     // 因为特征点是图像坐标系，所以讲H矩阵由相机坐标系换算到图像坐标系
     Eigen::Matrix3f invK = K.inverse();
-    Eigen::Matrix3f A = invK * H21 * K;
+    Eigen::Matrix3f A    = invK * H21 * K;
 
     Eigen::JacobiSVD<Eigen::Matrix3f> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    Eigen::Matrix3f U = svd.matrixU();
-    Eigen::Matrix3f V = svd.matrixV();
-    Eigen::Matrix3f Vt = V.transpose();
-    Eigen::Vector3f w = svd.singularValues();
+    Eigen::Matrix3f                   U  = svd.matrixU();
+    Eigen::Matrix3f                   V  = svd.matrixV();
+    Eigen::Matrix3f                   Vt = V.transpose();
+    Eigen::Vector3f                   w  = svd.singularValues();
 
     float s = U.determinant() * Vt.determinant();
 
@@ -798,7 +807,7 @@ bool TwoViewReconstruction::ReconstructH(
     // step3.1：计算 sin(theta)和cos(theta)，case d'=d2
     float aux_stheta = sqrt((d1 * d1 - d2 * d2) * (d2 * d2 - d3 * d3)) / ((d1 + d3) * d2);
 
-    float ctheta = (d2 * d2 + d1 * d3) / ((d1 + d3) * d2);
+    float ctheta   = (d2 * d2 + d1 * d3) / ((d1 + d3) * d2);
     float stheta[] = {aux_stheta, -aux_stheta, -aux_stheta, aux_stheta};
 
     // step3.2：计算四种旋转矩阵R，t
@@ -857,7 +866,7 @@ bool TwoViewReconstruction::ReconstructH(
     // step3.3：计算 sin(theta)和cos(theta)，case d'=-d2
     float aux_sphi = sqrt((d1 * d1 - d2 * d2) * (d2 * d2 - d3 * d3)) / ((d1 - d3) * d2);
 
-    float cphi = (d1 * d3 - d2 * d2) / ((d1 - d3) * d2);
+    float cphi   = (d1 * d3 - d2 * d2) / ((d1 - d3) * d2);
     float sphi[] = {aux_sphi, -aux_sphi, -aux_sphi, aux_sphi};
 
     // step3.4：计算四种旋转矩阵R，t
@@ -895,31 +904,32 @@ bool TwoViewReconstruction::ReconstructH(
         vn.push_back(n);
     }
 
-    int bestGood = 0;
-    int secondBestGood = 0;
-    int bestSolutionIdx = -1;
-    float bestParallax = -1;
+    int                 bestGood        = 0;
+    int                 secondBestGood  = 0;
+    int                 bestSolutionIdx = -1;
+    float               bestParallax    = -1;
     vector<cv::Point3f> bestP3D;
-    vector<bool> bestTriangulated;
+    vector<bool>        bestTriangulated;
 
-    // Instead of applying the visibility constraints proposed in the Faugeras' paper (which could fail for points seen with low parallax)
-    // We reconstruct all hypotheses and check in terms of triangulated points and parallax
+    // Instead of applying the visibility constraints proposed in the Faugeras' paper (which could fail for points seen
+    // with low parallax) We reconstruct all hypotheses and check in terms of triangulated points and parallax
     // step4：d'=d2和d'=-d2分别对应8组(R t)，通过恢复3D点并判断是否在相机正前方的方法来确定最优解
     for (size_t i = 0; i < 8; i++)
     {
-        float parallaxi;
+        float               parallaxi;
         vector<cv::Point3f> vP3Di;
-        vector<bool> vbTriangulatedi;
-        int nGood = CheckRT(vR[i], vt[i], mvKeys1, mvKeys2, mvMatches12, vbMatchesInliers, K, vP3Di, 4.0 * mSigma2, vbTriangulatedi, parallaxi);
+        vector<bool>        vbTriangulatedi;
+        int nGood = CheckRT(vR[i], vt[i], mvKeys1, mvKeys2, mvMatches12, vbMatchesInliers, K, vP3Di, 4.0 * mSigma2,
+                            vbTriangulatedi, parallaxi);
 
         // 保留最优的和次优的
         if (nGood > bestGood)
         {
-            secondBestGood = bestGood;
-            bestGood = nGood;
-            bestSolutionIdx = i;
-            bestParallax = parallaxi;
-            bestP3D = vP3Di;
+            secondBestGood   = bestGood;
+            bestGood         = nGood;
+            bestSolutionIdx  = i;
+            bestParallax     = parallaxi;
+            bestP3D          = vP3Di;
             bestTriangulated = vbTriangulatedi;
         }
         else if (nGood > secondBestGood)
@@ -929,9 +939,10 @@ bool TwoViewReconstruction::ReconstructH(
     }
 
     // step5：通过判断最优是否明显好于次优，从而判断该次Homography分解是否成功
-    if (secondBestGood < 0.75 * bestGood && bestParallax >= minParallax && bestGood > minTriangulated && bestGood > 0.9 * N)
+    if (secondBestGood < 0.75 * bestGood && bestParallax >= minParallax && bestGood > minTriangulated &&
+        bestGood > 0.9 * N)
     {
-        T21 = Sophus::SE3f(vR[bestSolutionIdx], vt[bestSolutionIdx]);
+        T21            = Sophus::SE3f(vR[bestSolutionIdx], vt[bestSolutionIdx]);
         vbTriangulated = bestTriangulated;
 
         return true;
@@ -940,17 +951,19 @@ bool TwoViewReconstruction::ReconstructH(
     return false;
 }
 
-/** 
- * @brief 像素坐标标准化，计算点集的横纵均值，与均值偏差的均值。最后返回的是变化矩阵T 直接乘以像素坐标的齐次向量即可获得去中心去均值后的特征点坐标
+/**
+ * @brief 像素坐标标准化，计算点集的横纵均值，与均值偏差的均值。最后返回的是变化矩阵T
+ * 直接乘以像素坐标的齐次向量即可获得去中心去均值后的特征点坐标
  * @param vKeys 特征点
  * @param vNormalizedPoints 去中心去均值后的特征点坐标
  * @param T  变化矩阵
  */
-void TwoViewReconstruction::Normalize(const vector<cv::KeyPoint> &vKeys, vector<cv::Point2f> &vNormalizedPoints, Eigen::Matrix3f &T)
+void TwoViewReconstruction::Normalize(const vector<cv::KeyPoint>& vKeys, vector<cv::Point2f>& vNormalizedPoints,
+                                      Eigen::Matrix3f& T)
 {
-    float meanX = 0;
-    float meanY = 0;
-    const int N = vKeys.size();
+    float     meanX = 0;
+    float     meanY = 0;
+    const int N     = vKeys.size();
 
     vNormalizedPoints.resize(N);
 
@@ -1011,12 +1024,13 @@ void TwoViewReconstruction::Normalize(const vector<cv::KeyPoint> &vKeys, vector<
  * @param vP3D 三维点
  * @param th2 误差半径
  * @param vbGood 大小与mvKeys1一致，表示哪个点被重建了
- * @param parallax 
+ * @param parallax
  */
-int TwoViewReconstruction::CheckRT(
-    const Eigen::Matrix3f &R, const Eigen::Vector3f &t, const vector<cv::KeyPoint> &vKeys1, const vector<cv::KeyPoint> &vKeys2,
-    const vector<Match> &vMatches12, vector<bool> &vbMatchesInliers,
-    const Eigen::Matrix3f &K, vector<cv::Point3f> &vP3D, float th2, vector<bool> &vbGood, float &parallax)
+int TwoViewReconstruction::CheckRT(const Eigen::Matrix3f& R, const Eigen::Vector3f& t,
+                                   const vector<cv::KeyPoint>& vKeys1, const vector<cv::KeyPoint>& vKeys2,
+                                   const vector<Match>& vMatches12, vector<bool>& vbMatchesInliers,
+                                   const Eigen::Matrix3f& K, vector<cv::Point3f>& vP3D, float th2, vector<bool>& vbGood,
+                                   float& parallax)
 {
     // Calibration parameters
     const float fx = K(0, 0);
@@ -1045,7 +1059,7 @@ int TwoViewReconstruction::CheckRT(
     Eigen::Matrix<float, 3, 4> P2;
     P2.block<3, 3>(0, 0) = R;
     P2.block<3, 1>(0, 3) = t;
-    P2 = K * P2;
+    P2                   = K * P2;
 
     // 第二个相机的光心在世界坐标系下的坐标
     Eigen::Vector3f O2 = -R.transpose() * t;
@@ -1058,8 +1072,8 @@ int TwoViewReconstruction::CheckRT(
             continue;
 
         // kp1和kp2是匹配特征点
-        const cv::KeyPoint &kp1 = vKeys1[vMatches12[i].first];
-        const cv::KeyPoint &kp2 = vKeys2[vMatches12[i].second];
+        const cv::KeyPoint& kp1 = vKeys1[vMatches12[i].first];
+        const cv::KeyPoint& kp2 = vKeys2[vMatches12[i].second];
 
         Eigen::Vector3f p3dC1;
         Eigen::Vector3f x_p1(kp1.pt.x, kp1.pt.y, 1);
@@ -1077,21 +1091,21 @@ int TwoViewReconstruction::CheckRT(
         // Check parallax
         // 步骤4：计算视差角余弦值
         Eigen::Vector3f normal1 = p3dC1 - O1;
-        float dist1 = normal1.norm();
+        float           dist1   = normal1.norm();
 
         Eigen::Vector3f normal2 = p3dC1 - O2;
-        float dist2 = normal2.norm();
+        float           dist2   = normal2.norm();
 
         float cosParallax = normal1.dot(normal2) / (dist1 * dist2);
 
         // 步骤5：判断3D点是否在两个摄像头前方
-        // Check depth in front of first camera (only if enough parallax, as "infinite" points can easily go to negative depth)
-        // 步骤5.1：3D点深度为负，在第一个摄像头后方，淘汰
+        // Check depth in front of first camera (only if enough parallax, as "infinite" points can easily go to negative
+        // depth) 步骤5.1：3D点深度为负，在第一个摄像头后方，淘汰
         if (p3dC1(2) <= 0 && cosParallax < 0.99998)
             continue;
 
-        // Check depth in front of second camera (only if enough parallax, as "infinite" points can easily go to negative depth)
-        // 步骤5.2：3D点深度为负，在第二个摄像头后方，淘汰
+        // Check depth in front of second camera (only if enough parallax, as "infinite" points can easily go to
+        // negative depth) 步骤5.2：3D点深度为负，在第二个摄像头后方，淘汰
         Eigen::Vector3f p3dC2 = R * p3dC1 + t;
 
         if (p3dC2(2) <= 0 && cosParallax < 0.99998)
@@ -1102,8 +1116,8 @@ int TwoViewReconstruction::CheckRT(
         // 计算3D点在第一个图像上的投影误差
         float im1x, im1y;
         float invZ1 = 1.0 / p3dC1(2);
-        im1x = fx * p3dC1(0) * invZ1 + cx;
-        im1y = fy * p3dC1(1) * invZ1 + cy;
+        im1x        = fx * p3dC1(0) * invZ1 + cx;
+        im1y        = fy * p3dC1(1) * invZ1 + cy;
 
         float squareError1 = (im1x - kp1.pt.x) * (im1x - kp1.pt.x) + (im1y - kp1.pt.y) * (im1y - kp1.pt.y);
 
@@ -1116,8 +1130,8 @@ int TwoViewReconstruction::CheckRT(
         // 计算3D点在第二个图像上的投影误差
         float im2x, im2y;
         float invZ2 = 1.0 / p3dC2(2);
-        im2x = fx * p3dC2(0) * invZ2 + cx;
-        im2y = fy * p3dC2(1) * invZ2 + cy;
+        im2x        = fx * p3dC2(0) * invZ2 + cx;
+        im2y        = fy * p3dC2(1) * invZ2 + cy;
 
         float squareError2 = (im2x - kp2.pt.x) * (im2x - kp2.pt.x) + (im2y - kp2.pt.y) * (im2y - kp2.pt.y);
 
@@ -1142,8 +1156,8 @@ int TwoViewReconstruction::CheckRT(
         sort(vCosParallax.begin(), vCosParallax.end());
 
         // !排序后并没有取最小的视差角，而是取一个较小的视差角
-		// 作者的做法：如果经过检验过后的有效3D点小于50个，那么就取最后那个最小的视差角(cos值最大)
-		// 如果大于50个，就取排名第50个的较小的视差角即可，为了避免3D点太多时出现太小的视差角 
+        // 作者的做法：如果经过检验过后的有效3D点小于50个，那么就取最后那个最小的视差角(cos值最大)
+        // 如果大于50个，就取排名第50个的较小的视差角即可，为了避免3D点太多时出现太小的视差角
         size_t idx = min(50, int(vCosParallax.size() - 1));
         // 将这个选中的角弧度制转换为角度制
         parallax = acos(vCosParallax[idx]) * 180 / CV_PI;
@@ -1162,7 +1176,8 @@ int TwoViewReconstruction::CheckRT(
  * ## 反对称矩阵性质
  * 多视图几何上定义：一个3×3的矩阵是本质矩阵的充要条件是它的奇异值中有两个相等而第三个是0，为什么呢？
  * 首先我们知道 E=[t]×​R=SR其中S为反对称矩阵，反对称矩阵有什么性质呢？
- * 结论1：如果 S 是实的反对称矩阵，那么S=UBU^T，其中 B 为形如diag(a1​Z，a2​Z...am​Z，0，0...0)的分块对角阵，其中 Z = [0, 1; -1, 0]
+ * 结论1：如果 S 是实的反对称矩阵，那么S=UBU^T，其中 B
+ 为形如diag(a1​Z，a2​Z...am​Z，0，0...0)的分块对角阵，其中 Z = [0, 1; -1, 0]
  * 反对称矩阵的特征矢量都是纯虚数并且奇数阶的反对称矩阵必是奇异的
  * 那么根据这个结论我们可以将 S 矩阵写成 S=kUZU^⊤，而 Z 为
  * | 0, 1, 0 |
@@ -1173,16 +1188,18 @@ int TwoViewReconstruction::CheckRT(
  * | 1, 0, 0 |
  * | 0, 0, 1 |
  * E=SR=Udiag(1,1,0)(WU^⊤R)  这样就证明了 E 拥有两个相等的奇异值
- * 
+ *
  * ## 恢复相机矩阵
  * 假定第一个摄像机矩阵是P=[I∣0]，为了计算第二个摄像机矩阵P′，必须把 E 矩阵分解为反对成举着和旋转矩阵的乘积 SR。
- * 还是根据上面的结论1，我们在相差一个常数因子的前提下有 S=UZU^T，我们假设旋转矩阵分解为UXV^T，注意这里是假设旋转矩阵分解形式为UXV^T，并不是旋转矩阵的svd分解，
+ * 还是根据上面的结论1，我们在相差一个常数因子的前提下有
+ S=UZU^T，我们假设旋转矩阵分解为UXV^T，注意这里是假设旋转矩阵分解形式为UXV^T，并不是旋转矩阵的svd分解，
  * 其中 UV都是E矩阵分解出的
  * Udiag(1,1,0)V^T = E = SR = (UZU^T)(UXV^⊤) = U(ZX)V^T
  * 则有 ZX = diag(1,1,0)，因此 x=W或者 X=W^T
  * 结论：如果 E 的SVD分解为 Udiag(1,1,0)V^⊤，E = SR有两种分解形式，分别是： S = UZU^⊤    R = UWVTor UW^TV^⊤
 
- * 接着分析，又因为St=0（自己和自己叉乘肯定为0嘛）以及∥t∥=1（对两个摄像机矩阵的基线的一种常用归一化），因此 t = U(0,0,1)^T = u3​，
+ * 接着分析，又因为St=0（自己和自己叉乘肯定为0嘛）以及∥t∥=1（对两个摄像机矩阵的基线的一种常用归一化），因此 t =
+ U(0,0,1)^T = u3​，
  * 即矩阵 U 的最后一列，这样的好处是不用再去求S了，应为t的符号不确定，R矩阵有两种可能，因此其分解有如下四种情况：
  * P′=[UWV^T ∣ +u3​] or [UWV^T ∣ −u3​] or [UW^TV^T ∣ +u3​] or [UW^TV^T ∣ −u3​]
  * @param E  Essential Matrix
@@ -1191,14 +1208,14 @@ int TwoViewReconstruction::CheckRT(
  * @param t  Translation
  * @see Multiple View Geometry in Computer Vision - Result 9.19 p259
  */
-void TwoViewReconstruction::DecomposeE(const Eigen::Matrix3f &E, Eigen::Matrix3f &R1, Eigen::Matrix3f &R2, Eigen::Vector3f &t)
+void TwoViewReconstruction::DecomposeE(const Eigen::Matrix3f& E, Eigen::Matrix3f& R1, Eigen::Matrix3f& R2,
+                                       Eigen::Vector3f& t)
 {
-
     Eigen::JacobiSVD<Eigen::Matrix3f> svd(E, Eigen::ComputeFullU | Eigen::ComputeFullV);
 
     // 对 t 有归一化，但是这个地方并没有决定单目整个SLAM过程的尺度
     // 因为CreateInitialMapMonocular函数对3D点深度会缩放，然后反过来对 t 有改变
-    Eigen::Matrix3f U = svd.matrixU();
+    Eigen::Matrix3f U  = svd.matrixU();
     Eigen::Matrix3f Vt = svd.matrixV().transpose();
 
     t = U.col(2);
@@ -1220,4 +1237,4 @@ void TwoViewReconstruction::DecomposeE(const Eigen::Matrix3f &E, Eigen::Matrix3f
         R2 = -R2;
 }
 
-} // namespace ORB_SLAM
+}  // namespace ORB_SLAM3

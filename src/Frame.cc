@@ -596,6 +596,7 @@ void Frame::AssignFeaturesToGrid()
 
     // 开始对mGrid这个二维数组中的每一个vector元素遍历并预分配空间
     for (unsigned int i = 0; i < FRAME_GRID_COLS; i++)
+    {
         for (unsigned int j = 0; j < FRAME_GRID_ROWS; j++)
         {
             mGrid[i][j].reserve(nReserve);
@@ -604,9 +605,9 @@ void Frame::AssignFeaturesToGrid()
                 mGridRight[i][j].reserve(nReserve);
             }
         }
+    }
 
     // Step 2 遍历每个特征点，将每个特征点在mvKeysUn中的索引值放到对应的网格mGrid中
-
     for (int i = 0; i < N; i++)
     {
         const cv::KeyPoint& kp = (Nleft == -1) ? mvKeysUn[i] : (i < Nleft) ? mvKeys[i] : mvKeysRight[i - Nleft];
@@ -1208,7 +1209,7 @@ void Frame::ComputeImageBounds(const cv::Mat& imLeft)
         mnMinX = min(mat.at<float>(0, 0), mat.at<float>(2, 0));  // 左上和左下横坐标最小的
         mnMaxX = max(mat.at<float>(1, 0), mat.at<float>(3, 0));  // 右上和右下横坐标最大的
         mnMinY = min(mat.at<float>(0, 1), mat.at<float>(1, 1));  // 左上和右上纵坐标最小的
-        mnMaxY = max(mat.at<float>(2, 1), mat.at<float>(3, 1));  // 左下和右下纵坐标最小的
+        mnMaxY = max(mat.at<float>(2, 1), mat.at<float>(3, 1));  // 左下和右下纵坐标最大的
     }
     else
     {

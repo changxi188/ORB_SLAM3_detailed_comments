@@ -1838,6 +1838,7 @@ void Tracking::PreintegrateIMU()
     // 构造imu预处理器,并初始化标定数据
     IMU::Preintegrated* pImuPreintegratedFromLastFrame =
         new IMU::Preintegrated(mLastFrame.mImuBias, mCurrentFrame.mImuCalib);
+
     // 针对预积分位置的不同做不同中值积分的处理
     /**
      *  根据上面imu帧的筛选，IMU与图像帧的时序如下：
@@ -2925,34 +2926,35 @@ void Tracking::MonocularInitialization()
     {
         // Set Reference Frame
         // 单目初始帧的特征点数必须大于100
-        if (mCurrentFrame.mvKeys.size() > 100)
+        if (mCurrentFrame.mvKeys.size() <= 100)
         {
-            // 初始化需要两帧，分别是mInitialFrame，mCurrentFrame
-            mInitialFrame = Frame(mCurrentFrame);
-            // 用当前帧更新上一帧
-            mLastFrame = Frame(mCurrentFrame);
-            // mvbPrevMatched  记录"上一帧"所有特征点
-            mvbPrevMatched.resize(mCurrentFrame.mvKeysUn.size());
-            for (size_t i = 0; i < mCurrentFrame.mvKeysUn.size(); i++)
-                mvbPrevMatched[i] = mCurrentFrame.mvKeysUn[i].pt;
-
-            // 初始化为-1 表示没有任何匹配。这里面存储的是匹配的点的id
-            fill(mvIniMatches.begin(), mvIniMatches.end(), -1);
-
-            // 初始化预积分
-            if (mSensor == System::IMU_MONOCULAR)
-            {
-                if (mpImuPreintegratedFromLastKF)
-                {
-                    delete mpImuPreintegratedFromLastKF;
-                }
-                mpImuPreintegratedFromLastKF     = new IMU::Preintegrated(IMU::Bias(), *mpImuCalib);
-                mCurrentFrame.mpImuPreintegrated = mpImuPreintegratedFromLastKF;
-            }
-            // 下一帧准备做单目初始化了
-            mbReadyToInitializate = true;
             return;
         }
+
+        // 初始化需要两帧，分别是mInitialFrame，mCurrentFrame
+        mInitialFrame = Frame(mCurrentFrame);
+        // 用当前帧更新上一帧
+        mLastFrame = Frame(mCurrentFrame);
+        // mvbPrevMatched  记录"上一帧"所有特征点
+        mvbPrevMatched.resize(mCurrentFrame.mvKeysUn.size());
+        for (size_t i = 0; i < mCurrentFrame.mvKeysUn.size(); i++)
+            mvbPrevMatched[i] = mCurrentFrame.mvKeysUn[i].pt;
+
+        // 初始化为-1 表示没有任何匹配。这里面存储的是匹配的点的id
+        fill(mvIniMatches.begin(), mvIniMatches.end(), -1);
+
+        // 初始化预积分
+        if (mSensor == System::IMU_MONOCULAR)
+        {
+            if (mpImuPreintegratedFromLastKF)
+            {
+                delete mpImuPreintegratedFromLastKF;
+            }
+            mpImuPreintegratedFromLastKF     = new IMU::Preintegrated(IMU::Bias(), *mpImuCalib);
+            mCurrentFrame.mpImuPreintegrated = mpImuPreintegratedFromLastKF;
+        }
+        // 下一帧准备做单目初始化了
+        mbReadyToInitializate = true;
     }
     else  // 第二帧来了
     {

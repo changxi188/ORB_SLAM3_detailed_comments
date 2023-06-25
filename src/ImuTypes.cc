@@ -1,8 +1,9 @@
 /**
  * This file is part of ORB-SLAM3
  *
- * Copyright (C) 2017-2021 Carlos Campos, Richard Elvira, Juan J. Gómez Rodríguez, José M.M. Montiel and Juan D. Tardós, University of Zaragoza.
- * Copyright (C) 2014-2016 Raúl Mur-Artal, José M.M. Montiel and Juan D. Tardós, University of Zaragoza.
+ * Copyright (C) 2017-2021 Carlos Campos, Richard Elvira, Juan J. Gómez Rodríguez, José M.M. Montiel and Juan D. Tardós,
+ * University of Zaragoza. Copyright (C) 2014-2016 Raúl Mur-Artal, José M.M. Montiel and Juan D. Tardós, University of
+ * Zaragoza.
  *
  * ORB-SLAM3 is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
  * License as published by the Free Software Foundation, either version 3 of the License, or
@@ -16,8 +17,8 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ImuTypes.h"
 #include "Converter.h"
+#include "ImuTypes.h"
 
 #include "GeometricTools.h"
 
@@ -31,32 +32,34 @@ namespace IMU
 
 const float eps = 1e-4;
 
-/** 
+/**
  * @brief 强制让R变成一个正交矩阵
  * @param R 待优化的旋转矩阵
  * @return 优化后的矩阵
  */
-Eigen::Matrix3f NormalizeRotation(const Eigen::Matrix3f &R)
+Eigen::Matrix3f NormalizeRotation(const Eigen::Matrix3f& R)
 {
     // 这里关注一下
-    // 1. 对于行列数一样的矩阵，Eigen::ComputeThinU | Eigen::ComputeThinV    与    Eigen::ComputeFullU | Eigen::ComputeFullV 一样
-    // 2. 对于行列数不同的矩阵，例如3*4 或者 4*3 矩阵只有3个奇异向量，计算的时候如果是Thin 那么得出的UV矩阵列数只能是3，如果是full那么就是4
+    // 1. 对于行列数一样的矩阵，Eigen::ComputeThinU | Eigen::ComputeThinV    与    Eigen::ComputeFullU |
+    // Eigen::ComputeFullV 一样
+    // 2. 对于行列数不同的矩阵，例如3*4 或者 4*3 矩阵只有3个奇异向量，计算的时候如果是Thin
+    // 那么得出的UV矩阵列数只能是3，如果是full那么就是4
     // 3. thin会损失一部分数据，但是会加快计算，对于大型矩阵解算方程时，可以用thin加速得到结果
     Eigen::JacobiSVD<Eigen::Matrix3f> svd(R, Eigen::ComputeFullU | Eigen::ComputeFullV);
     return svd.matrixU() * svd.matrixV().transpose();
 }
 
-/** 
+/**
  * @brief 计算右雅可比
  * @param xyz 李代数
  * @return Jr
  */
-Eigen::Matrix3f RightJacobianSO3(const float &x, const float &y, const float &z)
+Eigen::Matrix3f RightJacobianSO3(const float& x, const float& y, const float& z)
 {
     Eigen::Matrix3f I;
     I.setIdentity();
-    const float d2 = x * x + y * y + z * z;
-    const float d = sqrt(d2);
+    const float     d2 = x * x + y * y + z * z;
+    const float     d  = sqrt(d2);
     Eigen::Vector3f v;
     v << x, y, z;
     Eigen::Matrix3f W = Sophus::SO3f::hat(v);
@@ -70,27 +73,27 @@ Eigen::Matrix3f RightJacobianSO3(const float &x, const float &y, const float &z)
     }
 }
 
-/** 
+/**
  * @brief 计算右雅可比
  * @param v so3
  * @return Jr
  */
-Eigen::Matrix3f RightJacobianSO3(const Eigen::Vector3f &v)
+Eigen::Matrix3f RightJacobianSO3(const Eigen::Vector3f& v)
 {
     return RightJacobianSO3(v(0), v(1), v(2));
 }
 
-/** 
+/**
  * @brief 计算右雅可比的逆
  * @param xyz so3
  * @return Jr^-1
  */
-Eigen::Matrix3f InverseRightJacobianSO3(const float &x, const float &y, const float &z)
+Eigen::Matrix3f InverseRightJacobianSO3(const float& x, const float& y, const float& z)
 {
     Eigen::Matrix3f I;
     I.setIdentity();
-    const float d2 = x * x + y * y + z * z;
-    const float d = sqrt(d2);
+    const float     d2 = x * x + y * y + z * z;
+    const float     d  = sqrt(d2);
     Eigen::Vector3f v;
     v << x, y, z;
     Eigen::Matrix3f W = Sophus::SO3f::hat(v);
@@ -105,24 +108,63 @@ Eigen::Matrix3f InverseRightJacobianSO3(const float &x, const float &y, const fl
     }
 }
 
-/** 
+/**
  * @brief 计算右雅可比的逆
  * @param v so3
  * @return Jr^-1
  */
-Eigen::Matrix3f InverseRightJacobianSO3(const Eigen::Vector3f &v)
+Eigen::Matrix3f InverseRightJacobianSO3(const Eigen::Vector3f& v)
 {
     return InverseRightJacobianSO3(v(0), v(1), v(2));
 }
 
 /**
+ * @brief 设置参数
+ * @param Tbc_ 位姿变换
+ * @param ng 噪声
+ * @param na 噪声
+ * @param ngw 随机游走
+ * @param naw 随机游走
+ */
+void Calib::Set(const Sophus::SE3<float>& sophTbc, const float& ng, const float& na, const float& ngw, const float& naw)
+{
+    mbIsSet          = true;
+    const float ng2  = ng * ng;
+    const float na2  = na * na;
+    const float ngw2 = ngw * ngw;
+    const float naw2 = naw * naw;
+
+    // Sophus/Eigen
+    mTbc = sophTbc;
+    mTcb = mTbc.inverse();
+    // 噪声协方差
+    Cov.diagonal() << ng2, ng2, ng2, na2, na2, na2;
+    // 随机游走协方差
+    CovWalk.diagonal() << ngw2, ngw2, ngw2, naw2, naw2, naw2;
+}
+
+/**
+ * @brief imu标定参数的构造函数
+ * @param calib imu标定参数
+ */
+Calib::Calib(const Calib& calib)
+{
+    mbIsSet = calib.mbIsSet;
+    // Sophus/Eigen parameters
+    mTbc    = calib.mTbc;
+    mTcb    = calib.mTcb;
+    Cov     = calib.Cov;
+    CovWalk = calib.CovWalk;
+}
+
+/**
  * @brief                  计算旋转角度积分量
- * 
+ *
  * @param[in] angVel       陀螺仪数据
  * @param[in] imuBias      陀螺仪偏置
  * @param[in] time         两帧间的时间差
  */
-IntegratedRotation::IntegratedRotation(const Eigen::Vector3f &angVel, const Bias &imuBias, const float &time)
+IntegratedRotation::IntegratedRotation(const Eigen::Vector3f& angVel, const Bias& imuBias, const float& time)
 {
     // 得到考虑偏置后的角度旋转
     const float x = (angVel(0) - imuBias.bwx) * time;
@@ -131,7 +173,7 @@ IntegratedRotation::IntegratedRotation(const Eigen::Vector3f &angVel, const Bias
 
     // 计算旋转矩阵的模值，后面用罗德里格公式计算旋转矩阵时会用到
     const float d2 = x * x + y * y + z * z;
-    const float d = sqrt(d2);
+    const float d  = sqrt(d2);
 
     Eigen::Vector3f v;
     v << x, y, z;
@@ -151,60 +193,75 @@ IntegratedRotation::IntegratedRotation(const Eigen::Vector3f &angVel, const Bias
     }
 }
 
-/** 
+/**
  * @brief 预积分类构造函数，根据输入的偏置初始化预积分参数
  * @param b_ 偏置
  * @param calib imu标定参数的类
  */
-Preintegrated::Preintegrated(const Bias &b_, const Calib &calib)
+Preintegrated::Preintegrated(const Bias& b_, const Calib& calib)
 {
-    Nga = calib.Cov;
+    Nga     = calib.Cov;
     NgaWalk = calib.CovWalk;
     Initialize(b_);
 }
 
 // Copy constructor
-Preintegrated::Preintegrated(Preintegrated *pImuPre) 
-    : dT(pImuPre->dT), C(pImuPre->C), Info(pImuPre->Info),
-    Nga(pImuPre->Nga), NgaWalk(pImuPre->NgaWalk), b(pImuPre->b), dR(pImuPre->dR), dV(pImuPre->dV),
-    dP(pImuPre->dP), JRg(pImuPre->JRg), JVg(pImuPre->JVg), JVa(pImuPre->JVa), JPg(pImuPre->JPg), JPa(pImuPre->JPa),
-    avgA(pImuPre->avgA), avgW(pImuPre->avgW), bu(pImuPre->bu), db(pImuPre->db), mvMeasurements(pImuPre->mvMeasurements)
+Preintegrated::Preintegrated(Preintegrated* pImuPre)
+  : dT(pImuPre->dT)
+  , C(pImuPre->C)
+  , Info(pImuPre->Info)
+  , Nga(pImuPre->Nga)
+  , NgaWalk(pImuPre->NgaWalk)
+  , b(pImuPre->b)
+  , dR(pImuPre->dR)
+  , dV(pImuPre->dV)
+  , dP(pImuPre->dP)
+  , JRg(pImuPre->JRg)
+  , JVg(pImuPre->JVg)
+  , JVa(pImuPre->JVa)
+  , JPg(pImuPre->JPg)
+  , JPa(pImuPre->JPa)
+  , avgA(pImuPre->avgA)
+  , avgW(pImuPre->avgW)
+  , bu(pImuPre->bu)
+  , db(pImuPre->db)
+  , mvMeasurements(pImuPre->mvMeasurements)
 {
 }
 
-/** 
+/**
  * @brief 复制上一帧的预积分
  * @param pImuPre 上一帧的预积分
  */
-void Preintegrated::CopyFrom(Preintegrated *pImuPre)
+void Preintegrated::CopyFrom(Preintegrated* pImuPre)
 {
-    dT = pImuPre->dT;
-    C = pImuPre->C;
-    Info = pImuPre->Info;
-    Nga = pImuPre->Nga;
+    dT      = pImuPre->dT;
+    C       = pImuPre->C;
+    Info    = pImuPre->Info;
+    Nga     = pImuPre->Nga;
     NgaWalk = pImuPre->NgaWalk;
     b.CopyFrom(pImuPre->b);
     dR = pImuPre->dR;
     dV = pImuPre->dV;
     dP = pImuPre->dP;
     // 旋转关于陀螺仪偏置变化的雅克比，以此类推
-    JRg = pImuPre->JRg;
-    JVg = pImuPre->JVg;
-    JVa = pImuPre->JVa;
-    JPg = pImuPre->JPg;
-    JPa = pImuPre->JPa;
+    JRg  = pImuPre->JRg;
+    JVg  = pImuPre->JVg;
+    JVa  = pImuPre->JVa;
+    JPg  = pImuPre->JPg;
+    JPa  = pImuPre->JPa;
     avgA = pImuPre->avgA;
     avgW = pImuPre->avgW;
     bu.CopyFrom(pImuPre->bu);
-    db = pImuPre->db;
+    db             = pImuPre->db;
     mvMeasurements = pImuPre->mvMeasurements;
 }
 
-/** 
+/**
  * @brief 初始化预积分
  * @param b_ 偏置
  */
-void Preintegrated::Initialize(const Bias &b_)
+void Preintegrated::Initialize(const Bias& b_)
 {
     dR.setIdentity();
     dV.setZero();
@@ -217,20 +274,20 @@ void Preintegrated::Initialize(const Bias &b_)
     C.setZero();
     Info.setZero();
     db.setZero();
-    b = b_;
-    bu = b_;  // 更新后的偏置
+    b  = b_;
+    bu = b_;         // 更新后的偏置
     avgA.setZero();  // 平均加速度
     avgW.setZero();  // 平均角速度
     dT = 0.0f;
     mvMeasurements.clear();  // 存放imu数据及dt
 }
 
-/** 
+/**
  * @brief 根据新的偏置重新积分mvMeasurements里的数据 Optimizer::InertialOptimization调用
- */ 
+ */
 void Preintegrated::Reintegrate()
 {
-    std::unique_lock<std::mutex> lock(mMutex);
+    std::unique_lock<std::mutex>  lock(mMutex);
     const std::vector<integrable> aux = mvMeasurements;
     Initialize(bu);
     for (size_t i = 0; i < aux.size(); i++)
@@ -239,12 +296,13 @@ void Preintegrated::Reintegrate()
 
 /**
  * @brief 预积分计算，更新noise
- * 
+ *
  * @param[in] acceleration  加速度计数据
  * @param[in] angVel        陀螺仪数据
  * @param[in] dt            两图像 帧之间时间差
  */
-void Preintegrated::IntegrateNewMeasurement(const Eigen::Vector3f &acceleration, const Eigen::Vector3f &angVel, const float &dt)
+void Preintegrated::IntegrateNewMeasurement(const Eigen::Vector3f& acceleration, const Eigen::Vector3f& angVel,
+                                            const float& dt)
 {
     // 保存imu数据，利用中值积分的结果构造一个预积分类保存在mvMeasurements中
     mvMeasurements.push_back(integrable(acceleration, angVel, dt));
@@ -308,14 +366,17 @@ void Preintegrated::IntegrateNewMeasurement(const Eigen::Vector3f &acceleration,
     // 小量delta初始为0，更新后通常也为0，故省略了小量的更新
     // Update covariance
     // Step 3.更新协方差，frost经典预积分论文的第63个公式，推导了噪声（ηa, ηg）对dR dV dP 的影响
-    C.block<9, 9>(0, 0) = A * C.block<9, 9>(0, 0) * A.transpose() + B * Nga * B.transpose();  // B矩阵为9*6矩阵 Nga 6*6对角矩阵，3个陀螺仪噪声的平方，3个加速度计噪声的平方
+    C.block<9, 9>(0, 0) =
+        A * C.block<9, 9>(0, 0) * A.transpose() +
+        B * Nga * B.transpose();  // B矩阵为9*6矩阵 Nga 6*6对角矩阵，3个陀螺仪噪声的平方，3个加速度计噪声的平方
     // 这一部分最开始是0矩阵，随着积分次数增加，每次都加上随机游走，偏置的信息矩阵
     C.block<6, 6>(9, 9) += NgaWalk;
 
     // Update rotation jacobian wrt bias correction
     // 计算偏置的雅克比矩阵，r对bg的导数，∂ΔRij/∂bg = (ΔRjj-1) * ∂ΔRij-1/∂bg - Jr(j-1)*t
     // 论文作者对forster论文公式的基础上做了变形，然后递归更新，参见 https://github.com/UZ-SLAMLab/ORB_SLAM3/issues/212
-    // ? 为什么先更新JPa、JPg、JVa、JVg最后更新JRg? 答：这里必须先更新dRi才能更新到这个值，但是为什么JPg和JVg依赖的上一个JRg值进行更新的？
+    // ? 为什么先更新JPa、JPg、JVa、JVg最后更新JRg?
+    // 答：这里必须先更新dRi才能更新到这个值，但是为什么JPg和JVg依赖的上一个JRg值进行更新的？
     JRg = dRi.deltaR.transpose() * JRg - dRi.rightJ * dt;
 
     // Total integrated time
@@ -323,18 +384,18 @@ void Preintegrated::IntegrateNewMeasurement(const Eigen::Vector3f &acceleration,
     dT += dt;
 }
 
-/** 
+/**
  * @brief 融合两个预积分，发生在删除关键帧的时候，3帧变2帧，需要把两段预积分融合
  * @param pPrev 前面的预积分
  */
-void Preintegrated::MergePrevious(Preintegrated *pPrev)
+void Preintegrated::MergePrevious(Preintegrated* pPrev)
 {
     if (pPrev == this)
         return;
 
     std::unique_lock<std::mutex> lock1(mMutex);
     std::unique_lock<std::mutex> lock2(pPrev->mMutex);
-    Bias bav;
+    Bias                         bav;
     bav.bwx = bu.bwx;
     bav.bwy = bu.bwy;
     bav.bwz = bu.bwz;
@@ -352,11 +413,11 @@ void Preintegrated::MergePrevious(Preintegrated *pPrev)
         IntegrateNewMeasurement(aux2[i].a, aux2[i].w, aux2[i].t);
 }
 
-/** 
+/**
  * @brief 更新偏置
  * @param bu_ 偏置
  */
-void Preintegrated::SetNewBias(const Bias &bu_)
+void Preintegrated::SetNewBias(const Bias& bu_)
 {
     std::unique_lock<std::mutex> lock(mMutex);
     bu = bu_;
@@ -369,23 +430,23 @@ void Preintegrated::SetNewBias(const Bias &bu_)
     db(5) = bu_.baz - b.baz;
 }
 
-/** 
+/**
  * @brief 获得当前偏置与输入偏置的改变量
  * @param b_ 偏置
  * @return 改变量
  */
-IMU::Bias Preintegrated::GetDeltaBias(const Bias &b_)
+IMU::Bias Preintegrated::GetDeltaBias(const Bias& b_)
 {
     std::unique_lock<std::mutex> lock(mMutex);
     return IMU::Bias(b_.bax - b.bax, b_.bay - b.bay, b_.baz - b.baz, b_.bwx - b.bwx, b_.bwy - b.bwy, b_.bwz - b.bwz);
 }
 
-/** 
+/**
  * @brief 根据新的偏置计算新的dR
  * @param b_ 新的偏置
  * @return dR
  */
-Eigen::Matrix3f Preintegrated::GetDeltaRotation(const Bias &b_)
+Eigen::Matrix3f Preintegrated::GetDeltaRotation(const Bias& b_)
 {
     std::unique_lock<std::mutex> lock(mMutex);
     // 计算偏置的变化量
@@ -396,37 +457,37 @@ Eigen::Matrix3f Preintegrated::GetDeltaRotation(const Bias &b_)
     return NormalizeRotation(dR * Sophus::SO3f::exp(JRg * dbg).matrix());
 }
 
-/** 
+/**
  * @brief 根据新的偏置计算新的dV
  * @param b_ 新的偏置
  * @return dV
  */
-Eigen::Vector3f Preintegrated::GetDeltaVelocity(const Bias &b_)
+Eigen::Vector3f Preintegrated::GetDeltaVelocity(const Bias& b_)
 {
     std::unique_lock<std::mutex> lock(mMutex);
-    Eigen::Vector3f dbg, dba;
+    Eigen::Vector3f              dbg, dba;
     dbg << b_.bwx - b.bwx, b_.bwy - b.bwy, b_.bwz - b.bwz;
     dba << b_.bax - b.bax, b_.bay - b.bay, b_.baz - b.baz;
-    // 考虑偏置后，dV对偏置线性化的近似求解,邱笑晨《预积分总结与公式推导》P13，JPg和JPa在预积分处理中更新 
+    // 考虑偏置后，dV对偏置线性化的近似求解,邱笑晨《预积分总结与公式推导》P13，JPg和JPa在预积分处理中更新
     return dV + JVg * dbg + JVa * dba;
 }
 
-/** 
+/**
  * @brief 根据新的偏置计算新的dP
  * @param b_ 新的偏置
  * @return dP
  */
-Eigen::Vector3f Preintegrated::GetDeltaPosition(const Bias &b_)
+Eigen::Vector3f Preintegrated::GetDeltaPosition(const Bias& b_)
 {
     std::unique_lock<std::mutex> lock(mMutex);
-    Eigen::Vector3f dbg, dba;
+    Eigen::Vector3f              dbg, dba;
     dbg << b_.bwx - b.bwx, b_.bwy - b.bwy, b_.bwz - b.bwz;
     dba << b_.bax - b.bax, b_.bay - b.bay, b_.baz - b.baz;
     // 考虑偏置后，dP对偏置线性化的近似求解,邱笑晨《预积分总结与公式推导》P13，JPg和JPa在预积分处理中更新
     return dP + JPg * dbg + JPa * dba;
 }
 
-/** 
+/**
  * @brief 返回经过db(δba, δbg)更新后的dR,与上面是一个意思
  * @return dR
  */
@@ -436,7 +497,7 @@ Eigen::Matrix3f Preintegrated::GetUpdatedDeltaRotation()
     return NormalizeRotation(dR * Sophus::SO3f::exp(JRg * db.head(3)).matrix());
 }
 
-/** 
+/**
  * @brief 返回经过db(δba, δbg)更新后的dV,与上面是一个意思
  * @return dV
  */
@@ -446,7 +507,7 @@ Eigen::Vector3f Preintegrated::GetUpdatedDeltaVelocity()
     return dV + JVg * db.head(3) + JVa * db.tail(3);
 }
 
-/** 
+/**
  * @brief 返回经过db(δba, δbg)更新后的dP,与上面是一个意思
  * @return dP
  */
@@ -456,7 +517,7 @@ Eigen::Vector3f Preintegrated::GetUpdatedDeltaPosition()
     return dP + JPg * db.head(3) + JPa * db.tail(3);
 }
 
-/** 
+/**
  * @brief 获取dR
  * @return dR
  */
@@ -466,7 +527,7 @@ Eigen::Matrix3f Preintegrated::GetOriginalDeltaRotation()
     return dR;
 }
 
-/** 
+/**
  * @brief 获取dV
  * @return dV
  */
@@ -476,7 +537,7 @@ Eigen::Vector3f Preintegrated::GetOriginalDeltaVelocity()
     return dV;
 }
 
-/** 
+/**
  * @brief 获取dP
  * @return dP
  */
@@ -486,7 +547,7 @@ Eigen::Vector3f Preintegrated::GetOriginalDeltaPosition()
     return dP;
 }
 
-/** 
+/**
  * @brief 获取b,更新前的偏置
  * @return b
  */
@@ -496,7 +557,7 @@ Bias Preintegrated::GetOriginalBias()
     return b;
 }
 
-/** 
+/**
  * @brief 获取bu,更新后的偏置
  * @return bu
  */
@@ -506,7 +567,7 @@ Bias Preintegrated::GetUpdatedBias()
     return bu;
 }
 
-/** 
+/**
  * @brief 获取db,更新前后的偏置差
  * @return db
  */
@@ -516,11 +577,11 @@ Eigen::Matrix<float, 6, 1> Preintegrated::GetDeltaBias()
     return db;
 }
 
-/** 
+/**
  * @brief 赋值新的偏置
  * @param b 偏置
  */
-void Bias::CopyFrom(Bias &b)
+void Bias::CopyFrom(Bias& b)
 {
     bax = b.bax;
     bay = b.bay;
@@ -530,7 +591,7 @@ void Bias::CopyFrom(Bias &b)
     bwz = b.bwz;
 }
 
-std::ostream &operator<<(std::ostream &out, const Bias &b)
+std::ostream& operator<<(std::ostream& out, const Bias& b)
 {
     if (b.bwx > 0)
         out << " ";
@@ -554,45 +615,6 @@ std::ostream &operator<<(std::ostream &out, const Bias &b)
     return out;
 }
 
-/** 
- * @brief 设置参数
- * @param Tbc_ 位姿变换
- * @param ng 噪声
- * @param na 噪声
- * @param ngw 随机游走
- * @param naw 随机游走
- */
-void Calib::Set(const Sophus::SE3<float> &sophTbc, const float &ng, const float &na, const float &ngw, const float &naw)
-{
-    mbIsSet = true;
-    const float ng2 = ng * ng;
-    const float na2 = na * na;
-    const float ngw2 = ngw * ngw;
-    const float naw2 = naw * naw;
+}  // namespace IMU
 
-    // Sophus/Eigen
-    mTbc = sophTbc;
-    mTcb = mTbc.inverse();
-    // 噪声协方差
-    Cov.diagonal() << ng2, ng2, ng2, na2, na2, na2;
-    // 随机游走协方差
-    CovWalk.diagonal() << ngw2, ngw2, ngw2, naw2, naw2, naw2;
-}
-
-/** 
- * @brief imu标定参数的构造函数
- * @param calib imu标定参数
- */
-Calib::Calib(const Calib &calib)
-{
-    mbIsSet = calib.mbIsSet;
-    // Sophus/Eigen parameters
-    mTbc = calib.mTbc;
-    mTcb = calib.mTcb;
-    Cov = calib.Cov;
-    CovWalk = calib.CovWalk;
-}
-
-} // namespace IMU
-
-} // namespace ORB_SLAM2
+}  // namespace ORB_SLAM3
