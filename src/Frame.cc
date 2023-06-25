@@ -33,7 +33,6 @@
 
 namespace ORB_SLAM3
 {
-
 // 下一个生成的帧的ID,这里是初始化类的静态成员变量
 long unsigned int Frame::nNextId = 0;
 
@@ -1051,9 +1050,8 @@ vector<size_t> Frame::GetFeaturesInArea(const float& x, const float& y, const fl
             for (size_t j = 0, jend = vCell.size(); j < jend; j++)
             {
                 // 根据索引先读取这个特征点
-                const cv::KeyPoint& kpUn = (Nleft == -1) ? mvKeysUn[vCell[j]] :
-                                           (!bRight)     ? mvKeys[vCell[j]] :
-                                                           mvKeysRight[vCell[j]];
+                const cv::KeyPoint& kpUn =
+                    (Nleft == -1) ? mvKeysUn[vCell[j]] : (!bRight) ? mvKeys[vCell[j]] : mvKeysRight[vCell[j]];
                 if (bCheckLevels)
                 {
                     // cv::KeyPoint::octave中表示的是从金字塔的哪一层提取的数据

@@ -40,7 +40,6 @@
 
 namespace ORB_SLAM3
 {
-
 class Map;
 class MapPoint;
 class Frame;
