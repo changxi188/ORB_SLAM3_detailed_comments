@@ -65,7 +65,11 @@ void EdgeSE3ProjectXYZOnlyPose::linearizeOplus()
     double z = xyz_trans[2];
 
     Eigen::Matrix<double, 3, 6> SE3deriv;
-    SE3deriv << 0.f, z, -y, 1.f, 0.f, 0.f, -z, 0.f, x, 0.f, 1.f, 0.f, y, -x, 0.f, 0.f, 0.f, 1.f;
+    // clang-format off
+    SE3deriv << 0.f,   z,  -y, 1.f, 0.f, 0.f,
+                 -z, 0.f,   x, 0.f, 1.f, 0.f,
+                  y,  -x, 0.f, 0.f, 0.f, 1.f;
+    // clang-format on
 
     _jacobianOplusXi = -pCamera->projectJac(xyz_trans) * SE3deriv;
 }
