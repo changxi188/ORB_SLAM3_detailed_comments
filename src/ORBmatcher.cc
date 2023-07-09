@@ -202,8 +202,12 @@ int ORBmatcher::SearchByProjection(Frame& F, const vector<MapPoint*>& vpMapPoint
                     const size_t idx = *vit;
 
                     if (F.mvpMapPoints[idx + F.Nleft])
+                    {
                         if (F.mvpMapPoints[idx + F.Nleft]->Observations() > 0)
+                        {
                             continue;
+                        }
+                    }
 
                     const cv::Mat& d = F.mDescriptors.row(idx + F.Nleft);
 
@@ -2003,184 +2007,187 @@ int ORBmatcher::SearchByProjection(Frame& CurrentFrame, const Frame& LastFrame, 
     {
         MapPoint* pMP = LastFrame.mvpMapPoints[i];
 
-        if (pMP)
+        if (!pMP)
         {
-            if (!LastFrame.mvbOutlier[i])
+            continue;
+        }
+
+        if (LastFrame.mvbOutlier[i])
+        {
+            continue;
+        }
+
+        // 对上一帧有效的MapPoints投影到当前帧坐标系
+        Eigen::Vector3f x3Dw = pMP->GetWorldPos();
+        Eigen::Vector3f x3Dc = Tcw * x3Dw;
+
+        const float xc    = x3Dc(0);
+        const float yc    = x3Dc(1);
+        const float invzc = 1.0 / x3Dc(2);
+
+        if (invzc < 0)
+            continue;
+
+        // 投影到当前帧中
+        Eigen::Vector2f uv = CurrentFrame.mpCamera->project(x3Dc);
+
+        if (uv(0) < CurrentFrame.mnMinX || uv(0) > CurrentFrame.mnMaxX)
+            continue;
+        if (uv(1) < CurrentFrame.mnMinY || uv(1) > CurrentFrame.mnMaxY)
+            continue;
+        // 认为投影前后地图点的尺度信息不变
+        int nLastOctave = (LastFrame.Nleft == -1 || i < LastFrame.Nleft) ?
+                              LastFrame.mvKeys[i].octave :
+                              LastFrame.mvKeysRight[i - LastFrame.Nleft].octave;
+
+        // Search in a window. Size depends on scale
+        // 单目：th = 7，双目：th = 15
+        float radius = th * CurrentFrame.mvScaleFactors[nLastOctave];  // 尺度越大，搜索范围越大
+
+        // 记录候选匹配点的id
+        vector<size_t> vIndices2;
+
+        // Step 4 根据相机的前后前进方向来判断搜索尺度范围。
+        // 以下可以这么理解，例如一个有一定面积的圆点，在某个尺度n下它是一个特征点
+        // 当相机前进时，圆点的面积增大，在某个尺度m下它是一个特征点，由于面积增大，则需要在更高的尺度下才能检测出来
+        // 当相机后退时，圆点的面积减小，在某个尺度m下它是一个特征点，由于面积减小，则需要在更低的尺度下才能检测出来
+        if (bForward)  // 前进,则上一帧兴趣点在所在的尺度nLastOctave<=nCurOctave
+            vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nLastOctave);
+        else if (bBackward)  // 后退,则上一帧兴趣点在所在的尺度0<=nCurOctave<=nLastOctave
+            vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, 0, nLastOctave);
+        else  // 在[nLastOctave-1, nLastOctave+1]中搜索
+            vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nLastOctave - 1, nLastOctave + 1);
+
+        if (vIndices2.empty())
+            continue;
+
+        const cv::Mat dMP = pMP->GetDescriptor();
+
+        int bestDist = 256;
+        int bestIdx2 = -1;
+
+        // Step 5 遍历候选匹配点，寻找距离最小的最佳匹配点
+        for (vector<size_t>::const_iterator vit = vIndices2.begin(), vend = vIndices2.end(); vit != vend; vit++)
+        {
+            const size_t i2 = *vit;
+
+            // 如果该特征点已经有对应的MapPoint了,则退出该次循环
+            if (CurrentFrame.mvpMapPoints[i2])
+                if (CurrentFrame.mvpMapPoints[i2]->Observations() > 0)
+                    continue;
+
+            if (CurrentFrame.Nleft == -1 && CurrentFrame.mvuRight[i2] > 0)
             {
-                // 对上一帧有效的MapPoints投影到当前帧坐标系
-                Eigen::Vector3f x3Dw = pMP->GetWorldPos();
-                Eigen::Vector3f x3Dc = Tcw * x3Dw;
-
-                const float xc    = x3Dc(0);
-                const float yc    = x3Dc(1);
-                const float invzc = 1.0 / x3Dc(2);
-
-                if (invzc < 0)
+                // 双目和rgbd的情况，需要保证右图的点也在搜索半径以内
+                const float ur = uv(0) - CurrentFrame.mbf * invzc;
+                const float er = fabs(ur - CurrentFrame.mvuRight[i2]);
+                if (er > radius)
                     continue;
+            }
 
-                // 投影到当前帧中
-                Eigen::Vector2f uv = CurrentFrame.mpCamera->project(x3Dc);
+            const cv::Mat& d = CurrentFrame.mDescriptors.row(i2);
 
-                if (uv(0) < CurrentFrame.mnMinX || uv(0) > CurrentFrame.mnMaxX)
-                    continue;
-                if (uv(1) < CurrentFrame.mnMinY || uv(1) > CurrentFrame.mnMaxY)
-                    continue;
-                // 认为投影前后地图点的尺度信息不变
-                int nLastOctave = (LastFrame.Nleft == -1 || i < LastFrame.Nleft) ?
-                                      LastFrame.mvKeys[i].octave :
-                                      LastFrame.mvKeysRight[i - LastFrame.Nleft].octave;
+            const int dist = DescriptorDistance(dMP, d);
 
-                // Search in a window. Size depends on scale
-                // 单目：th = 7，双目：th = 15
-                float radius = th * CurrentFrame.mvScaleFactors[nLastOctave];  // 尺度越大，搜索范围越大
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                bestIdx2 = i2;
+            }
+        }
 
-                // 记录候选匹配点的id
-                vector<size_t> vIndices2;
+        // 最佳匹配距离要小于设定阈值
+        if (bestDist <= TH_HIGH)
+        {
+            CurrentFrame.mvpMapPoints[bestIdx2] = pMP;
+            nmatches++;
 
-                // Step 4 根据相机的前后前进方向来判断搜索尺度范围。
-                // 以下可以这么理解，例如一个有一定面积的圆点，在某个尺度n下它是一个特征点
-                // 当相机前进时，圆点的面积增大，在某个尺度m下它是一个特征点，由于面积增大，则需要在更高的尺度下才能检测出来
-                // 当相机后退时，圆点的面积减小，在某个尺度m下它是一个特征点，由于面积减小，则需要在更低的尺度下才能检测出来
-                if (bForward)  // 前进,则上一帧兴趣点在所在的尺度nLastOctave<=nCurOctave
-                    vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nLastOctave);
-                else if (bBackward)  // 后退,则上一帧兴趣点在所在的尺度0<=nCurOctave<=nLastOctave
-                    vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, 0, nLastOctave);
-                else  // 在[nLastOctave-1, nLastOctave+1]中搜索
-                    vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nLastOctave - 1, nLastOctave + 1);
+            // Step 6 计算匹配点旋转角度差所在的直方图
+            if (mbCheckOrientation)
+            {
+                cv::KeyPoint kpLF = (LastFrame.Nleft == -1) ? LastFrame.mvKeysUn[i] :
+                                    (i < LastFrame.Nleft)   ? LastFrame.mvKeys[i] :
+                                                              LastFrame.mvKeysRight[i - LastFrame.Nleft];
 
-                if (vIndices2.empty())
-                    continue;
+                cv::KeyPoint kpCF =
+                    (CurrentFrame.Nleft == -1)      ? CurrentFrame.mvKeysUn[bestIdx2] :
+                    (bestIdx2 < CurrentFrame.Nleft) ? CurrentFrame.mvKeys[bestIdx2] :
+                                                      CurrentFrame.mvKeysRight[bestIdx2 - CurrentFrame.Nleft];
+                float rot = kpLF.angle - kpCF.angle;
+                if (rot < 0.0)
+                    rot += 360.0f;
+                int bin = round(rot * factor);
+                if (bin == HISTO_LENGTH)
+                    bin = 0;
+                assert(bin >= 0 && bin < HISTO_LENGTH);
+                rotHist[bin].push_back(bestIdx2);
+            }
+        }
+        if (CurrentFrame.Nleft != -1)
+        {
+            Eigen::Vector3f x3Dr = CurrentFrame.GetRelativePoseTrl() * x3Dc;
+            Eigen::Vector2f uv   = CurrentFrame.mpCamera->project(x3Dr);
 
-                const cv::Mat dMP = pMP->GetDescriptor();
+            int nLastOctave = (LastFrame.Nleft == -1 || i < LastFrame.Nleft) ?
+                                  LastFrame.mvKeys[i].octave :
+                                  LastFrame.mvKeysRight[i - LastFrame.Nleft].octave;
 
-                int bestDist = 256;
-                int bestIdx2 = -1;
+            // Search in a window. Size depends on scale
+            float radius = th * CurrentFrame.mvScaleFactors[nLastOctave];
 
-                // Step 5 遍历候选匹配点，寻找距离最小的最佳匹配点
-                for (vector<size_t>::const_iterator vit = vIndices2.begin(), vend = vIndices2.end(); vit != vend; vit++)
+            vector<size_t> vIndices2;
+
+            if (bForward)
+                vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nLastOctave, -1, true);
+            else if (bBackward)
+                vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, 0, nLastOctave, true);
+            else
+                vIndices2 =
+                    CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nLastOctave - 1, nLastOctave + 1, true);
+
+            const cv::Mat dMP = pMP->GetDescriptor();
+
+            int bestDist = 256;
+            int bestIdx2 = -1;
+
+            for (vector<size_t>::const_iterator vit = vIndices2.begin(), vend = vIndices2.end(); vit != vend; vit++)
+            {
+                const size_t i2 = *vit;
+                if (CurrentFrame.mvpMapPoints[i2 + CurrentFrame.Nleft])
+                    if (CurrentFrame.mvpMapPoints[i2 + CurrentFrame.Nleft]->Observations() > 0)
+                        continue;
+
+                const cv::Mat& d = CurrentFrame.mDescriptors.row(i2 + CurrentFrame.Nleft);
+
+                const int dist = DescriptorDistance(dMP, d);
+
+                if (dist < bestDist)
                 {
-                    const size_t i2 = *vit;
-
-                    // 如果该特征点已经有对应的MapPoint了,则退出该次循环
-                    if (CurrentFrame.mvpMapPoints[i2])
-                        if (CurrentFrame.mvpMapPoints[i2]->Observations() > 0)
-                            continue;
-
-                    if (CurrentFrame.Nleft == -1 && CurrentFrame.mvuRight[i2] > 0)
-                    {
-                        // 双目和rgbd的情况，需要保证右图的点也在搜索半径以内
-                        const float ur = uv(0) - CurrentFrame.mbf * invzc;
-                        const float er = fabs(ur - CurrentFrame.mvuRight[i2]);
-                        if (er > radius)
-                            continue;
-                    }
-
-                    const cv::Mat& d = CurrentFrame.mDescriptors.row(i2);
-
-                    const int dist = DescriptorDistance(dMP, d);
-
-                    if (dist < bestDist)
-                    {
-                        bestDist = dist;
-                        bestIdx2 = i2;
-                    }
+                    bestDist = dist;
+                    bestIdx2 = i2;
                 }
+            }
 
-                // 最佳匹配距离要小于设定阈值
-                if (bestDist <= TH_HIGH)
+            if (bestDist <= TH_HIGH)
+            {
+                CurrentFrame.mvpMapPoints[bestIdx2 + CurrentFrame.Nleft] = pMP;
+                nmatches++;
+                if (mbCheckOrientation)
                 {
-                    CurrentFrame.mvpMapPoints[bestIdx2] = pMP;
-                    nmatches++;
+                    cv::KeyPoint kpLF = (LastFrame.Nleft == -1) ? LastFrame.mvKeysUn[i] :
+                                        (i < LastFrame.Nleft)   ? LastFrame.mvKeys[i] :
+                                                                  LastFrame.mvKeysRight[i - LastFrame.Nleft];
 
-                    // Step 6 计算匹配点旋转角度差所在的直方图
-                    if (mbCheckOrientation)
-                    {
-                        cv::KeyPoint kpLF = (LastFrame.Nleft == -1) ? LastFrame.mvKeysUn[i] :
-                                            (i < LastFrame.Nleft)   ? LastFrame.mvKeys[i] :
-                                                                      LastFrame.mvKeysRight[i - LastFrame.Nleft];
+                    cv::KeyPoint kpCF = CurrentFrame.mvKeysRight[bestIdx2];
 
-                        cv::KeyPoint kpCF =
-                            (CurrentFrame.Nleft == -1)      ? CurrentFrame.mvKeysUn[bestIdx2] :
-                            (bestIdx2 < CurrentFrame.Nleft) ? CurrentFrame.mvKeys[bestIdx2] :
-                                                              CurrentFrame.mvKeysRight[bestIdx2 - CurrentFrame.Nleft];
-                        float rot = kpLF.angle - kpCF.angle;
-                        if (rot < 0.0)
-                            rot += 360.0f;
-                        int bin = round(rot * factor);
-                        if (bin == HISTO_LENGTH)
-                            bin = 0;
-                        assert(bin >= 0 && bin < HISTO_LENGTH);
-                        rotHist[bin].push_back(bestIdx2);
-                    }
-                }
-                if (CurrentFrame.Nleft != -1)
-                {
-                    Eigen::Vector3f x3Dr = CurrentFrame.GetRelativePoseTrl() * x3Dc;
-                    Eigen::Vector2f uv   = CurrentFrame.mpCamera->project(x3Dr);
-
-                    int nLastOctave = (LastFrame.Nleft == -1 || i < LastFrame.Nleft) ?
-                                          LastFrame.mvKeys[i].octave :
-                                          LastFrame.mvKeysRight[i - LastFrame.Nleft].octave;
-
-                    // Search in a window. Size depends on scale
-                    float radius = th * CurrentFrame.mvScaleFactors[nLastOctave];
-
-                    vector<size_t> vIndices2;
-
-                    if (bForward)
-                        vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nLastOctave, -1, true);
-                    else if (bBackward)
-                        vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, 0, nLastOctave, true);
-                    else
-                        vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nLastOctave - 1,
-                                                                   nLastOctave + 1, true);
-
-                    const cv::Mat dMP = pMP->GetDescriptor();
-
-                    int bestDist = 256;
-                    int bestIdx2 = -1;
-
-                    for (vector<size_t>::const_iterator vit = vIndices2.begin(), vend = vIndices2.end(); vit != vend;
-                         vit++)
-                    {
-                        const size_t i2 = *vit;
-                        if (CurrentFrame.mvpMapPoints[i2 + CurrentFrame.Nleft])
-                            if (CurrentFrame.mvpMapPoints[i2 + CurrentFrame.Nleft]->Observations() > 0)
-                                continue;
-
-                        const cv::Mat& d = CurrentFrame.mDescriptors.row(i2 + CurrentFrame.Nleft);
-
-                        const int dist = DescriptorDistance(dMP, d);
-
-                        if (dist < bestDist)
-                        {
-                            bestDist = dist;
-                            bestIdx2 = i2;
-                        }
-                    }
-
-                    if (bestDist <= TH_HIGH)
-                    {
-                        CurrentFrame.mvpMapPoints[bestIdx2 + CurrentFrame.Nleft] = pMP;
-                        nmatches++;
-                        if (mbCheckOrientation)
-                        {
-                            cv::KeyPoint kpLF = (LastFrame.Nleft == -1) ? LastFrame.mvKeysUn[i] :
-                                                (i < LastFrame.Nleft)   ? LastFrame.mvKeys[i] :
-                                                                          LastFrame.mvKeysRight[i - LastFrame.Nleft];
-
-                            cv::KeyPoint kpCF = CurrentFrame.mvKeysRight[bestIdx2];
-
-                            float rot = kpLF.angle - kpCF.angle;
-                            if (rot < 0.0)
-                                rot += 360.0f;
-                            int bin = round(rot * factor);
-                            if (bin == HISTO_LENGTH)
-                                bin = 0;
-                            assert(bin >= 0 && bin < HISTO_LENGTH);
-                            rotHist[bin].push_back(bestIdx2 + CurrentFrame.Nleft);
-                        }
-                    }
+                    float rot = kpLF.angle - kpCF.angle;
+                    if (rot < 0.0)
+                        rot += 360.0f;
+                    int bin = round(rot * factor);
+                    if (bin == HISTO_LENGTH)
+                        bin = 0;
+                    assert(bin >= 0 && bin < HISTO_LENGTH);
+                    rotHist[bin].push_back(bestIdx2 + CurrentFrame.Nleft);
                 }
             }
         }

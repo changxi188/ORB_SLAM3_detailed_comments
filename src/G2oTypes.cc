@@ -17,8 +17,8 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "G2oTypes.h"
 #include "Converter.h"
+#include "G2oTypes.h"
 #include "ImuTypes.h"
 namespace ORB_SLAM3
 {
@@ -584,8 +584,12 @@ EdgeInertial::EdgeInertial(IMU::Preintegrated* pInt)
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 9, 9> > es(Info);
     Eigen::Matrix<double, 9, 1>                                 eigs = es.eigenvalues();
     for (int i = 0; i < 9; i++)
+    {
         if (eigs[i] < 1e-12)
+        {
             eigs[i] = 0;
+        }
+    }
     // asDiagonal 生成对角矩阵
     Info = es.eigenvectors() * eigs.asDiagonal() * es.eigenvectors().transpose();
     setInformation(Info);
@@ -643,7 +647,6 @@ void EdgeInertial::linearizeOplus()
     const Eigen::Vector3d er    = LogSO3(eR);                    // r△φij
     const Eigen::Matrix3d invJr = InverseRightJacobianSO3(er);   // Jr^-1(log(△Rij))
 
-    // 就很神奇，_jacobianOplus个数等于边的个数，里面的大小等于观测值维度（也就是残差）× 每个节点待优化值的维度
     // Jacobians wrt Pose 1
     // _jacobianOplus[0] 9*6矩阵 总体来说就是三个残差分别对pose1的旋转与平移（p）求导
     _jacobianOplus[0].setZero();

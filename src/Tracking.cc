@@ -1996,7 +1996,9 @@ bool Tracking::PredictStateIMU()
         return true;
     }
     else
+    {
         LOG(INFO) << "not IMU prediction!!" << endl;
+    }
 
     return false;
 }
@@ -3541,29 +3543,33 @@ bool Tracking::TrackWithMotionModel()
     int nmatchesMap = 0;
     for (int i = 0; i < mCurrentFrame.N; i++)
     {
-        if (mCurrentFrame.mvpMapPoints[i])
+        if (!mCurrentFrame.mvpMapPoints[i])
         {
-            if (mCurrentFrame.mvbOutlier[i])
-            {
-                // 如果优化后判断某个地图点是外点，清除它的所有关系
-                MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
+            continue;
+        }
 
-                mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint*>(NULL);
-                mCurrentFrame.mvbOutlier[i]   = false;
-                if (i < mCurrentFrame.Nleft)
-                {
-                    pMP->mbTrackInView = false;
-                }
-                else
-                {
-                    pMP->mbTrackInViewR = false;
-                }
-                pMP->mnLastFrameSeen = mCurrentFrame.mnId;
-                nmatches--;
+        if (mCurrentFrame.mvbOutlier[i])
+        {
+            // 如果优化后判断某个地图点是外点，清除它的所有关系
+            MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
+
+            mCurrentFrame.mvpMapPoints[i] = static_cast<MapPoint*>(NULL);
+            mCurrentFrame.mvbOutlier[i]   = false;
+            if (i < mCurrentFrame.Nleft)
+            {
+                pMP->mbTrackInView = false;
             }
-            else if (mCurrentFrame.mvpMapPoints[i]->Observations() > 0)
-                // 累加成功匹配到的地图点数目
-                nmatchesMap++;
+            else
+            {
+                pMP->mbTrackInViewR = false;
+            }
+            pMP->mnLastFrameSeen = mCurrentFrame.mnId;
+            nmatches--;
+        }
+        else if (mCurrentFrame.mvpMapPoints[i]->Observations() > 0)
+        {
+            // 累加成功匹配到的地图点数目
+            nmatchesMap++;
         }
     }
 
@@ -3617,7 +3623,9 @@ bool Tracking::TrackLocalMap()
         {
             aux1++;
             if (mCurrentFrame.mvbOutlier[i])
+            {
                 aux2++;
+            }
         }
     }
 
@@ -3665,7 +3673,9 @@ bool Tracking::TrackLocalMap()
         {
             aux1++;
             if (mCurrentFrame.mvbOutlier[i])
+            {
                 aux2++;
+            }
         }
     }
 
@@ -3764,15 +3774,21 @@ bool Tracking::TrackLocalMap()
             return false;
         }
         else
+        {
             return true;
+        }
     }
     else
     {
         // 以上情况都不满足，只要跟踪的地图点大于30个就认为成功了
         if (mnMatchesInliers < 30)
+        {
             return false;
+        }
         else
+        {
             return true;
+        }
     }
 }
 
@@ -4247,10 +4263,14 @@ void Tracking::SearchLocalPoints()
 
         // 已经被当前帧观测到的地图点肯定在视野范围内，跳过
         if (pMP->mnLastFrameSeen == mCurrentFrame.mnId)
+        {
             continue;
+        }
         // 跳过坏点
         if (pMP->isBad())
+        {
             continue;
+        }
         // Project (this fills MapPoint variables for matching)
         // 判断地图点是否在在当前帧视野内
         if (mCurrentFrame.isInFrustum(pMP, 0.5))
@@ -4400,11 +4420,6 @@ void Tracking::UpdateLocalKeyFrames()
                                                                      itend = observations.end();
                      it != itend; it++)
                 {
-                    // 这里的操作非常精彩！
-                    // map[key] = value，当要插入的键存在时，会覆盖键对应的原来的值。如果键不存在，则添加一组键值对
-                    // it->first 是地图点看到的关键帧，同一个关键帧看到的地图点会累加到该关键帧计数
-                    // 所以最后keyframeCounter
-                    // 第一个参数表示某个关键帧，第2个参数表示该关键帧看到了多少当前帧(mCurrentFrame)的地图点，也就是共视程度
                     keyframeCounter[it->first]++;
                 }
             }

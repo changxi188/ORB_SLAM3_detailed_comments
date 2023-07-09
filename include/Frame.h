@@ -182,6 +182,7 @@ private:
     // Sophus/Eigen migration
     Sophus::SE3<float>         mTcw;
     Eigen::Matrix<float, 3, 3> mRwc;
+    // mOw = t_wc
     Eigen::Matrix<float, 3, 1> mOw;
     Eigen::Matrix<float, 3, 3> mRcw;
     Eigen::Matrix<float, 3, 1> mtcw;

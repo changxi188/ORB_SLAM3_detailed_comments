@@ -174,6 +174,7 @@ protected:
     unsigned long int mnBackupKFinitialID;
     unsigned long int mnBackupKFlowerID;
 
+    // this for visualization
     std::vector<MapPoint*> mvpReferenceMapPoints;
 
     bool mbImuInitialized;

@@ -59,9 +59,8 @@ int Optimizer::PoseOptimization(Frame* pFrame)
 
     // Step 1：构造g2o优化器, BlockSolver_6_3表示：位姿 _PoseDim 为6维，路标点 _LandmarkDim 是3维
     g2o::SparseOptimizer                    optimizer;
-    g2o::BlockSolver_6_3::LinearSolverType* linearSolver;
-
-    linearSolver = new g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>();
+    g2o::BlockSolver_6_3::LinearSolverType* linearSolver =
+        new g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>();
 
     g2o::BlockSolver_6_3* solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
 
@@ -999,11 +998,10 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit)
 {
     // Step 1：创建g2o优化器，初始化顶点和边
     // 构建一个稀疏求解器
-    g2o::SparseOptimizer                 optimizer;
-    g2o::BlockSolverX::LinearSolverType* linearSolver;
+    g2o::SparseOptimizer optimizer;
 
     // 使用dense的求解器，（常见非dense求解器有cholmod线性求解器和shur补线性求解器）
-    linearSolver = new g2o::LinearSolverDense<g2o::BlockSolverX::PoseMatrixType>();
+    g2o::BlockSolverX::LinearSolverType* linearSolver = new g2o::LinearSolverDense<g2o::BlockSolverX::PoseMatrixType>();
 
     g2o::BlockSolverX* solver_ptr = new g2o::BlockSolverX(linearSolver);
 
@@ -1291,7 +1289,6 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit)
     optimizer.addEdge(ep);
 
     // Step 2：启动多轮优化，剔除外点
-
     // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
     // At the next optimization, outliers are not included, but at the end they can be classified as inliers again.
     // 与PoseInertialOptimizationLastKeyFrame函数对比，区别在于：在优化过程中保持卡方阈值不变
@@ -1465,7 +1462,6 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit)
     nInliers = nInliersMono + nInliersStereo;
 
     // Step 3：更新当前帧位姿、速度、IMU偏置
-
     // Recover optimized pose, velocity and biases
     // 给当前帧设置优化后的旋转、位移、速度，用来更新位姿
     pFrame->SetImuPoseVelocity(VP->estimate().Rwb.cast<float>(), VP->estimate().twb.cast<float>(),
@@ -1481,29 +1477,31 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit)
     Eigen::Matrix<double, 30, 30> H;
     H.setZero();
 
-    // 第1步，加上EdgeInertial（IMU预积分约束）的海森矩阵
-    //  ei的定义
-    //  EdgeInertial* ei = new EdgeInertial(pFrame->mpImuPreintegratedFrame);
-    //  ei->setVertex(0, VPk);
-    //  ei->setVertex(1, VVk);
-    //  ei->setVertex(2, VGk);
-    //  ei->setVertex(3, VAk);
-    //  ei->setVertex(4, VP);  // VertexPose* VP = new VertexPose(pFrame);
-    //  ei->setVertex(5, VV);  // VertexVelocity* VV = new VertexVelocity(pFrame);
-    //  ei->GetHessian()  =  J.t * J 下同，不做详细标注了
-    //  J
-    //        rn + tn  vn    gn   an   rn+1 + tn+1  vn+1
-    //  er      Jp1    Jv1  Jg1   Ja1      Jp2      Jv2
-    //  角标1表示上一帧，2表示当前帧
-    //       6            3             3           3            6            3
-    //  Jp1.t * Jp1  Jp1.t * Jv1  Jp1.t * Jg1  Jp1.t * Ja1  Jp1.t * Jp2  Jp1.t * Jv2     6
-    //  Jv1.t * Jp1  Jv1.t * Jv1  Jv1.t * Jg1  Jv1.t * Ja1  Jv1.t * Jp2  Jv1.t * Jv2     3
-    //  Jg1.t * Jp1  Jg1.t * Jv1  Jg1.t * Jg1  Jg1.t * Ja1  Jg1.t * Jp2  Jg1.t * Jv2     3
-    //  Ja1.t * Jp1  Ja1.t * Jv1  Ja1.t * Jg1  Ja1.t * Ja1  Ja1.t * Jp2  Ja1.t * Jv2     3
-    //  Jp2.t * Jp1  Jp2.t * Jv1  Jp2.t * Jg1  Jp2.t * Ja1  Jp2.t * Jp2  Jp2.t * Jv2     6
-    //  Jv2.t * Jp1  Jv2.t * Jv1  Jv2.t * Jg1  Jv2.t * Ja1  Jv2.t * Jp2  Jv2.t * Jv2     3
-    //  所以矩阵是24*24 的
+    // clang-format off
+    //第1步，加上EdgeInertial（IMU预积分约束）的海森矩阵
+    // ei的定义
+    // EdgeInertial* ei = new EdgeInertial(pFrame->mpImuPreintegratedFrame);
+    // ei->setVertex(0, VPk);
+    // ei->setVertex(1, VVk);
+    // ei->setVertex(2, VGk);
+    // ei->setVertex(3, VAk);
+    // ei->setVertex(4, VP);  // VertexPose* VP = new VertexPose(pFrame);
+    // ei->setVertex(5, VV);  // VertexVelocity* VV = new VertexVelocity(pFrame);
+    // ei->GetHessian()  =  J.t * J 下同，不做详细标注了
+    // J
+    //       rn + tn  vn    gn   an   rn+1 + tn+1  vn+1
+    // er      Jp1    Jv1  Jg1   Ja1      Jp2      Jv2
+    // 角标1表示上一帧，2表示当前帧
+    //      6            3             3           3            6            3
+    // Jp1.t * Jp1  Jp1.t * Jv1  Jp1.t * Jg1  Jp1.t * Ja1  Jp1.t * Jp2  Jp1.t * Jv2     6
+    // Jv1.t * Jp1  Jv1.t * Jv1  Jv1.t * Jg1  Jv1.t * Ja1  Jv1.t * Jp2  Jv1.t * Jv2     3
+    // Jg1.t * Jp1  Jg1.t * Jv1  Jg1.t * Jg1  Jg1.t * Ja1  Jg1.t * Jp2  Jg1.t * Jv2     3
+    // Ja1.t * Jp1  Ja1.t * Jv1  Ja1.t * Jg1  Ja1.t * Ja1  Ja1.t * Jp2  Ja1.t * Jv2     3
+    // Jp2.t * Jp1  Jp2.t * Jv1  Jp2.t * Jg1  Jp2.t * Ja1  Jp2.t * Jp2  Jp2.t * Jv2     6
+    // Jv2.t * Jp1  Jv2.t * Jv1  Jv2.t * Jg1  Jv2.t * Ja1  Jv2.t * Jp2  Jv2.t * Jv2     3
+    // 所以矩阵是24*24 的
     H.block<24, 24>(0, 0) += ei->GetHessian();
+    
     // 经过这步H变成了
     // 列数 6            3             3           3            6           3        6
     // ---------------------------------------------------------------------------------- 行数
@@ -1516,77 +1514,75 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit)
     //     0            0            0            0            0           0          0 |  6
     // ----------------------------------------------------------------------------------
 
-    // 第2步，加上EdgeGyroRW（陀螺仪随机游走约束）的信息矩阵：
+    //第2步，加上EdgeGyroRW（陀螺仪随机游走约束）的信息矩阵：
     //|   0~8   |       9~11     | 12~23 |     24~26     |27~29
-    //  9~11是上一帧的bg(3-dim)，24~26是当前帧的bg(3-dim)
-    //   egr的定义
-    //   EdgeGyroRW* egr = new EdgeGyroRW();
-    //   egr->setVertex(0, VGk);
-    //   egr->setVertex(1, VG);
+    // 9~11是上一帧的bg(3-dim)，24~26是当前帧的bg(3-dim)
+    //  egr的定义
+    //  EdgeGyroRW* egr = new EdgeGyroRW();
+    //  egr->setVertex(0, VGk);
+    //  egr->setVertex(1, VG);
     Eigen::Matrix<double, 6, 6> Hgr = egr->GetHessian();
     H.block<3, 3>(9, 9) += Hgr.block<3, 3>(0, 0);    // Jgr1.t * Jgr1
     H.block<3, 3>(9, 24) += Hgr.block<3, 3>(0, 3);   // Jgr1.t * Jgr2
     H.block<3, 3>(24, 9) += Hgr.block<3, 3>(3, 0);   // Jgr2.t * Jgr1
     H.block<3, 3>(24, 24) += Hgr.block<3, 3>(3, 3);  // Jgr2.t * Jgr2
+                                                     //
     // 经过这步H变成了
     // 列数 6            3                    3                      3            6           3             3         3
-    // ------------------------------------------------------------------------------------------------------------ 行数
-    // Jp1.t * Jp1  Jp1.t * Jv1         Jp1.t * Jg1           Jp1.t * Ja1  Jp1.t * Jp2  Jp1.t * Jv2        0  0 |  6
-    // Jv1.t * Jp1  Jv1.t * Jv1         Jv1.t * Jg1           Jv1.t * Ja1  Jv1.t * Jp2  Jv1.t * Jv2        0 0 | 3
-    // Jg1.t * Jp1  Jg1.t * Jv1  Jg1.t * Jg1 + Jgr1.t * Jgr1  Jg1.t * Ja1  Jg1.t * Jp2  Jg1.t * Jv2  Jgr1.t * Jgr2   0
-    // |  3 Ja1.t * Jp1  Ja1.t * Jv1         Ja1.t * Jg1           Ja1.t * Ja1  Ja1.t * Jp2  Ja1.t * Jv2        0 0 |  3
-    // Jp2.t * Jp1  Jp2.t * Jv1         Jp2.t * Jg1           Jp2.t * Ja1  Jp2.t * Jp2  Jp2.t * Jv2        0         0 |
-    // 6 Jv2.t * Jp1  Jv2.t * Jv1         Jv2.t * Jg1           Jv2.t * Ja1  Jv2.t * Jp2  Jv2.t * Jv2        0         0
-    // |  3
-    //     0            0             Jgr2.t * Jgr1                 0            0           0       Jgr2.t * Jgr2   0 |
-    //     3 0            0                    0                      0            0           0             0         0
-    //     |  3
+    // ----------------------------------------------------------------------------------------------------------------- 行数
+    // Jp1.t * Jp1  Jp1.t * Jv1         Jp1.t * Jg1           Jp1.t * Ja1  Jp1.t * Jp2  Jp1.t * Jv2        0         0 |  6
+    // Jv1.t * Jp1  Jv1.t * Jv1         Jv1.t * Jg1           Jv1.t * Ja1  Jv1.t * Jp2  Jv1.t * Jv2        0         0 |  3
+    // Jg1.t * Jp1  Jg1.t * Jv1  Jg1.t * Jg1 + Jgr1.t * Jgr1  Jg1.t * Ja1  Jg1.t * Jp2  Jg1.t * Jv2  Jgr1.t * Jgr2   0 |  3
+    // Ja1.t * Jp1  Ja1.t * Jv1         Ja1.t * Jg1           Ja1.t * Ja1  Ja1.t * Jp2  Ja1.t * Jv2        0         0 |  3
+    // Jp2.t * Jp1  Jp2.t * Jv1         Jp2.t * Jg1           Jp2.t * Ja1  Jp2.t * Jp2  Jp2.t * Jv2        0         0 |  6
+    // Jv2.t * Jp1  Jv2.t * Jv1         Jv2.t * Jg1           Jv2.t * Ja1  Jv2.t * Jp2  Jv2.t * Jv2        0         0 |  3
+    //     0            0             Jgr2.t * Jgr1                 0            0           0       Jgr2.t * Jgr2   0 |  3
+    //     0            0                    0                      0            0           0             0         0 |  3
     // -----------------------------------------------------------------------------------------------------------------
 
-    // 第3步，加上EdgeAccRW（加速度随机游走约束）的信息矩阵：
+    //第3步，加上EdgeAccRW（加速度随机游走约束）的信息矩阵：
     //|   0~11   |      12~14    | 15~26 |     27~29     |30
-    //  12~14是上一帧的ba(3-dim)，27~29是当前帧的ba(3-dim)
-    //  ear的定义
-    //  EdgeAccRW* ear = new EdgeAccRW();
-    //  ear->setVertex(0, VAk);
-    //  ear->setVertex(1, VA);
+    // 12~14是上一帧的ba(3-dim)，27~29是当前帧的ba(3-dim)
+    // ear的定义
+    // EdgeAccRW* ear = new EdgeAccRW();
+    // ear->setVertex(0, VAk);
+    // ear->setVertex(1, VA);
     Eigen::Matrix<double, 6, 6> Har = ear->GetHessian();
     H.block<3, 3>(12, 12) += Har.block<3, 3>(0, 0);  // Jar1.t * Jar1
     H.block<3, 3>(12, 27) += Har.block<3, 3>(0, 3);  // Jar1.t * Jar2
     H.block<3, 3>(27, 12) += Har.block<3, 3>(3, 0);  // Jar2.t * Jar1
     H.block<3, 3>(27, 27) += Har.block<3, 3>(3, 3);  // Jar2.t * Jar2
-    // 经过这步H变成了
-    // 列数 6            3                    3                            3                         6           3 3 3
-    // ---------------------------------------------------------------------------------------------------------------------------------------------------
-    // 行数 |  Jp1.t * Jp1  Jp1.t * Jv1         Jp1.t * Jg1                 Jp1.t * Ja1            |  Jp1.t * Jp2  Jp1.t
-    // * Jv2        0              0        |  6 |  Jv1.t * Jp1  Jv1.t * Jv1         Jv1.t * Jg1                 Jv1.t *
-    // Ja1            |  Jv1.t * Jp2  Jv1.t * Jv2        0              0        |  3 |  Jg1.t * Jp1  Jg1.t * Jv1  Jg1.t
-    // * Jg1 + Jgr1.t * Jgr1        Jg1.t * Ja1            |  Jg1.t * Jp2  Jg1.t * Jv2  Jgr1.t * Jgr2        0        |
-    // 3 |  Ja1.t * Jp1  Ja1.t * Jv1         Ja1.t * Jg1           Ja1.t * Ja1 + Jar1.t * Jar1  |  Ja1.t * Jp2  Ja1.t *
-    // Jv2        0       Jar1.t * Jar2   |  3
+                                                     
+    // 列数 6            3                    3                            3                         6           3             3              3
+    // --------------------------------------------------------------------------------------------------------------------------------------------------- 行数
+    // |  Jp1.t * Jp1  Jp1.t * Jv1         Jp1.t * Jg1                 Jp1.t * Ja1            |  Jp1.t * Jp2  Jp1.t * Jv2        0              0        |  6
+    // |  Jv1.t * Jp1  Jv1.t * Jv1         Jv1.t * Jg1                 Jv1.t * Ja1            |  Jv1.t * Jp2  Jv1.t * Jv2        0              0        |  3
+    // |  Jg1.t * Jp1  Jg1.t * Jv1  Jg1.t * Jg1 + Jgr1.t * Jgr1        Jg1.t * Ja1            |  Jg1.t * Jp2  Jg1.t * Jv2  Jgr1.t * Jgr2        0        |  3
+    // |  Ja1.t * Jp1  Ja1.t * Jv1         Ja1.t * Jg1           Ja1.t * Ja1 + Jar1.t * Jar1  |  Ja1.t * Jp2  Ja1.t * Jv2        0       Jar1.t * Jar2   |  3
     // |--------------------------------------------------------------------------------------------------------------------------------------------------
-    // |  Jp2.t * Jp1  Jp2.t * Jv1         Jp2.t * Jg1                 Jp2.t * Ja1            |  Jp2.t * Jp2  Jp2.t *
-    // Jv2        0              0        |  6 |  Jv2.t * Jp1  Jv2.t * Jv1         Jv2.t * Jg1                 Jv2.t *
-    // Ja1            |  Jv2.t * Jp2  Jv2.t * Jv2        0              0        |  3 |      0            0 Jgr2.t *
-    // Jgr1                      0                |        0           0       Jgr2.t * Jgr2        0        |  3 | 0 0
-    // 0                     Jar2.t * Jar1           |        0           0             0        Jar2.t * Jar2  |  3
+    // |  Jp2.t * Jp1  Jp2.t * Jv1         Jp2.t * Jg1                 Jp2.t * Ja1            |  Jp2.t * Jp2  Jp2.t * Jv2        0              0        |  6
+    // |  Jv2.t * Jp1  Jv2.t * Jv1         Jv2.t * Jg1                 Jv2.t * Ja1            |  Jv2.t * Jp2  Jv2.t * Jv2        0              0        |  3
+    // |      0            0              Jgr2.t * Jgr1                      0                |        0           0       Jgr2.t * Jgr2        0        |  3
+    // |      0            0                    0                     Jar2.t * Jar1           |        0           0             0        Jar2.t * Jar2  |  3
     // ---------------------------------------------------------------------------------------------------------------------------------------------------
 
-    // 第4步，加上EdgePriorPoseImu（先验约束）的信息矩阵：
+    //第4步，加上EdgePriorPoseImu（先验约束）的信息矩阵：
     //|   0~14   |  15~29
-    //  0~14是上一帧的P(6-dim)、V(3-dim)、BG(3-dim)、BA(3-dim)
-    //  ep定义
-    //  EdgePriorPoseImu* ep = new EdgePriorPoseImu(pFp->mpcpi);
-    //  ep->setVertex(0, VPk);
-    //  ep->setVertex(1, VVk);
-    //  ep->setVertex(2, VGk);
-    //  ep->setVertex(3, VAk);
-    //       6            3             3           3
-    //  Jp1.t * Jp1  Jp1.t * Jv1  Jp1.t * Jg1  Jp1.t * Ja1     6
-    //  Jv1.t * Jp1  Jv1.t * Jv1  Jv1.t * Jg1  Jv1.t * Ja1     3
-    //  Jg1.t * Jp1  Jg1.t * Jv1  Jg1.t * Jg1  Jg1.t * Ja1     3
-    //  Ja1.t * Jp1  Ja1.t * Jv1  Ja1.t * Jg1  Ja1.t * Ja1     3
+    // 0~14是上一帧的P(6-dim)、V(3-dim)、BG(3-dim)、BA(3-dim)
+    // ep定义
+    // EdgePriorPoseImu* ep = new EdgePriorPoseImu(pFp->mpcpi);
+    // ep->setVertex(0, VPk);
+    // ep->setVertex(1, VVk);
+    // ep->setVertex(2, VGk);
+    // ep->setVertex(3, VAk);
+    //      6            3             3           3
+    // Jp1.t * Jp1  Jp1.t * Jv1  Jp1.t * Jg1  Jp1.t * Ja1     6
+    // Jv1.t * Jp1  Jv1.t * Jv1  Jv1.t * Jg1  Jv1.t * Ja1     3
+    // Jg1.t * Jp1  Jg1.t * Jv1  Jg1.t * Jg1  Jg1.t * Ja1     3
+    // Ja1.t * Jp1  Ja1.t * Jv1  Ja1.t * Jg1  Ja1.t * Ja1     3
+    // 经过这步H变成了
     H.block<15, 15>(0, 0) += ep->GetHessian();  // 上一帧 的H矩阵，矩阵太大了不写了。。。总之就是加到下标为1相关的了
+    //clang-format on
 
     int tot_in = 0, tot_out = 0;
     // 第5步 关于位姿的海森
@@ -1653,28 +1649,28 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit)
     return nInitialCorrespondences - nBad;
 }
 
+
+// clang-format off
 /**
  * @brief PoseInertialOptimizationLastFrame 中使用 Marginalize(H, 0, 14);
  * 使用舒尔补的方式边缘化海森矩阵，边缘化。
- * 列数 6            3                    3                            3                         6           3 3 3
- * ---------------------------------------------------------------------------------------------------------------------------------------------------
- * 行数 |  Jp1.t * Jp1  Jp1.t * Jv1         Jp1.t * Jg1                 Jp1.t * Ja1            |  Jp1.t * Jp2  Jp1.t *
- * Jv2        0              0        |  6 |  Jv1.t * Jp1  Jv1.t * Jv1         Jv1.t * Jg1                 Jv1.t * Ja1
- * |  Jv1.t * Jp2  Jv1.t * Jv2        0              0        |  3 |  Jg1.t * Jp1  Jg1.t * Jv1  Jg1.t * Jg1 + Jgr1.t *
- * Jgr1        Jg1.t * Ja1            |  Jg1.t * Jp2  Jg1.t * Jv2  Jgr1.t * Jgr2        0        |  3 |  Ja1.t * Jp1
- * Ja1.t * Jv1         Ja1.t * Jg1           Ja1.t * Ja1 + Jar1.t * Jar1  |  Ja1.t * Jp2  Ja1.t * Jv2  Jar1.t * Jar2 0
- * |  3
+ * 列数 6            3                    3                            3                         6           3             3              3
+ * --------------------------------------------------------------------------------------------------------------------------------------------------- 行数
+ * |  Jp1.t * Jp1  Jp1.t * Jv1         Jp1.t * Jg1                 Jp1.t * Ja1            |  Jp1.t * Jp2  Jp1.t * Jv2        0              0        |  6
+ * |  Jv1.t * Jp1  Jv1.t * Jv1         Jv1.t * Jg1                 Jv1.t * Ja1            |  Jv1.t * Jp2  Jv1.t * Jv2        0              0        |  3
+ * |  Jg1.t * Jp1  Jg1.t * Jv1  Jg1.t * Jg1 + Jgr1.t * Jgr1        Jg1.t * Ja1            |  Jg1.t * Jp2  Jg1.t * Jv2  Jgr1.t * Jgr2        0        |  3
+ * |  Ja1.t * Jp1  Ja1.t * Jv1         Ja1.t * Jg1           Ja1.t * Ja1 + Jar1.t * Jar1  |  Ja1.t * Jp2  Ja1.t * Jv2  Jar1.t * Jar2        0        |  3
  * |--------------------------------------------------------------------------------------------------------------------------------------------------
- * |  Jp2.t * Jp1  Jp2.t * Jv1         Jp2.t * Jg1                 Jp2.t * Ja1            |  Jp2.t * Jp2  Jp2.t * Jv2 0
- * 0        |  6 |  Jv2.t * Jp1  Jv2.t * Jv1         Jv2.t * Jg1                 Jv2.t * Ja1            |  Jv2.t * Jp2
- * Jv2.t * Jv2        0              0        |  3 |      0            0              Jgr2.t * Jgr1 0                |
- * 0           0       Jgr2.t * Jgr2        0        |  3 |      0            0                    0 Jar2.t * Jar1 | 0
- * 0             0        Jar2.t * Jar2  |  3
+ * |  Jp2.t * Jp1  Jp2.t * Jv1         Jp2.t * Jg1                 Jp2.t * Ja1            |  Jp2.t * Jp2  Jp2.t * Jv2        0              0        |  6
+ * |  Jv2.t * Jp1  Jv2.t * Jv1         Jv2.t * Jg1                 Jv2.t * Ja1            |  Jv2.t * Jp2  Jv2.t * Jv2        0              0        |  3
+ * |      0            0              Jgr2.t * Jgr1                      0                |        0           0       Jgr2.t * Jgr2        0        |  3
+ * |      0            0                    0                     Jar2.t * Jar1           |        0           0             0        Jar2.t * Jar2  |  3
  * ---------------------------------------------------------------------------------------------------------------------------------------------------
  * @param H 30*30的海森矩阵
  * @param start 开始位置
  * @param end 结束位置
  */
+// clang-format on
 Eigen::MatrixXd Optimizer::Marginalize(const Eigen::MatrixXd& H, const int& start, const int& end)
 {
     // Goal
