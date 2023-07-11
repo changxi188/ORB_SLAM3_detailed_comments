@@ -868,14 +868,13 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame* pFrame, bool bRecInit
     }
 
     // 10. 更新当前帧位姿、速度、IMU偏置
-
     // Recover optimized pose, velocity and biases
     // 给当前帧设置优化后的旋转、位移、速度，用来更新位姿
     pFrame->SetImuPoseVelocity(VP->estimate().Rwb.cast<float>(), VP->estimate().twb.cast<float>(),
                                VV->estimate().cast<float>());
     Vector6d b;
     b << VG->estimate(), VA->estimate();
-    // 给当前帧设置优化后的bg，ba
+    // 给当前帧设置优化后的ba，bg
     pFrame->mImuBias = IMU::Bias(b[3], b[4], b[5], b[0], b[1], b[2]);
 
     // 11. 记录当前帧的优化状态，包括参数信息和对应的海森矩阵

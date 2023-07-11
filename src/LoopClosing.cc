@@ -851,6 +851,8 @@ bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*>& vpBowCand, 
     vector<int> vnMatchesStage(numCandidates, 0);
     int         index = 0;
 
+    LOG(INFO) << "DetectCommonRegionsFromBoW --- BoW candidates: There are " + to_string(vpBowCand.size()) +
+                     " possible candidates ";
     // Verbose::PrintMess("BoW candidates: There are " + to_string(vpBowCand.size()) + " possible candidates ",
     // Verbose::VERBOSITY_DEBUG);
     //  2. 对每个候选关键帧都进行详细的分析
@@ -866,7 +868,7 @@ bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*>& vpBowCand, 
         std::vector<KeyFrame*> vpCovKFi = pKFi->GetBestCovisibilityKeyFrames(nNumCovisibles);
         if (vpCovKFi.empty())
         {
-            std::cout << "Covisible list empty" << std::endl;
+            LOG(INFO) << "DetectCommonRegionsFromBoW --- Covisible list empty";
             vpCovKFi.push_back(pKFi);
         }
         else
@@ -892,10 +894,10 @@ bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*>& vpBowCand, 
         }
         if (bAbortByNearKF)
         {
-            // std::cout << "Check BoW aborted because is close to the matched one " << std::endl;
+            LOG(INFO) << "DetectCommonRegionsFromBoW --- Check BoW aborted because is close to the matched one ";
             continue;
         }
-        // std::cout << "Check BoW continue because is far to the matched one " << std::endl;
+        LOG(INFO) << "DetectCommonRegionsFromBoW --- Check BoW continue because is far to the matched one ";
 
         // search by bow 返回的参数, 记录窗口Wm中每个关键帧有哪些点能在当前关键帧Ka中通过bow找到匹配点
         std::vector<std::vector<MapPoint*>> vvpMatchedMPs;
@@ -918,9 +920,6 @@ bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*>& vpBowCand, 
         std::vector<KeyFrame*> vpKeyFrameMatchedMP =
             std::vector<KeyFrame*>(mpCurrentKF->GetMapPointMatches().size(), static_cast<KeyFrame*>(NULL));
 
-        // 记录在W_km中有最多匹配点的帧的局部index, 这个后面没有用到
-        int nIndexMostBoWMatchesKF = 0;
-
         // 遍历窗口内Wm的每个关键帧
         // 2.3 通过Bow寻找候选帧窗口内的关键帧地图点与当前关键帧的匹配点
         for (int j = 0; j < vpCovKFi.size(); ++j)
@@ -931,8 +930,7 @@ bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*>& vpBowCand, 
             int num = matcherBoW.SearchByBoW(mpCurrentKF, vpCovKFi[j], vvpMatchedMPs[j]);
             if (num > nMostBoWNumMatches)
             {
-                nMostBoWNumMatches     = num;
-                nIndexMostBoWMatchesKF = j;
+                nMostBoWNumMatches = num;
             }
         }
 
@@ -965,6 +963,7 @@ bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*>& vpBowCand, 
                 }
             }
         }
+
         // 1. 前面统计了vpCovKFi中每个帧与当前帧匹配点的位置，可否用点数高的代替
         // 2.
         // 有可能作者认为在DetectNBestCandidates已经找到共视关键帧中分数最多的了，所以这里不做判断直接使用原始的候选关键帧
@@ -973,239 +972,236 @@ bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*>& vpBowCand, 
         // 当窗口内的帧不是当前关键帧的相邻帧且匹配点足够多时
         // 3. 利用RANSAC寻找候选关键帧窗口与当前关键帧的相对位姿T_cm的初始值(可能是Sim3)
         // nBoWMatches = 20; // 最低bow匹配特征点数
-        if (numBoWMatches >= nBoWMatches)  // TODO pick a good threshold
+        if (numBoWMatches < nBoWMatches)  // TODO pick a good threshold
         {
-            // Geometric validation
-            bool bFixedScale = mbFixScale;
-            // 如果是单目带imu的模式且IMU初始化未完成第三阶段，则不固定scale
-            if (mpTracker->mSensor == System::IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
-                bFixedScale = false;
+            index++;
+            continue;
+        }
 
-            // 3.1 初始化sim3 solver
-            // Sim3Solver 的接口与orbslam2略有不同, 因为现在是1-N的对应关系
-            Sim3Solver solver =
-                Sim3Solver(mpCurrentKF, pMostBoWMatchesKF, vpMatchedPoints, bFixedScale, vpKeyFrameMatchedMP);
-            // Sim3Solver Ransac 置信度0.99，至少20个inliers 最多300次迭
-            solver.SetRansacParameters(0.99, nBoWInliers, 300);  // at least 15 inliers
+        // Geometric validation
+        bool bFixedScale = mbFixScale;
+        // 如果是单目带imu的模式且IMU初始化未完成第三阶段，则不固定scale
+        if (mpTracker->mSensor == System::IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
+            bFixedScale = false;
 
-            bool            bNoMore = false;
-            vector<bool>    vbInliers;
-            int             nInliers;
-            bool            bConverge = false;
-            Eigen::Matrix4f mTcm;
-            // 3.2 迭代到收敛
-            while (!bConverge && !bNoMore)
+        // 3.1 初始化sim3 solver
+        // Sim3Solver 的接口与orbslam2略有不同, 因为现在是1-N的对应关系
+        Sim3Solver solver =
+            Sim3Solver(mpCurrentKF, pMostBoWMatchesKF, vpMatchedPoints, bFixedScale, vpKeyFrameMatchedMP);
+        // Sim3Solver Ransac 置信度0.99，至少20个inliers 最多300次迭
+        solver.SetRansacParameters(0.99, nBoWInliers, 300);  // at least 15 inliers
+
+        bool            bNoMore = false;
+        vector<bool>    vbInliers;
+        int             nInliers;
+        bool            bConverge = false;
+        Eigen::Matrix4f mTcm;
+        // 3.2 迭代到收敛
+        while (!bConverge && !bNoMore)
+        {
+            mTcm = solver.iterate(20, bNoMore, vbInliers, nInliers, bConverge);
+            LOG(INFO) << "BoW guess: Solver achieve " + to_string(nInliers) + " geometrical inliers among " +
+                             to_string(nBoWInliers) + " BoW matches";
+            // Verbose::PrintMess("BoW guess: Solver achieve " + to_string(nInliers) + " geometrical inliers among "
+            // + to_string(nBoWInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
+        }
+
+        // 3.3 Guide matching refinement: 利用初始的Scm信息,进行双向重投影,并非线性优化得到更精确的Scm
+        if (!bConverge)
+        {
+            index++;
+            continue;
+        }
+
+        // std::cout << "Check BoW: SolverSim3 converged" << std::endl;
+
+        // Verbose::PrintMess("BoW guess: Convergende with " + to_string(nInliers) + " geometrical inliers among
+        // " + to_string(nBoWInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
+        //  Match by reprojection
+        vpCovKFi.clear();
+        // 拿到窗口内匹配最多的帧的最佳10个共视帧和它自己组成的窗口
+        vpCovKFi = pMostBoWMatchesKF->GetBestCovisibilityKeyFrames(nNumCovisibles);
+        vpCovKFi.push_back(pMostBoWMatchesKF);
+        // 这个后面没有用到
+        set<KeyFrame*> spCheckKFs(vpCovKFi.begin(), vpCovKFi.end());
+
+        // std::cout << "There are " << vpCovKFi.size() <<" near KFs" << std::endl;
+
+        // 辅助容器,避免重复添加地图点
+        set<MapPoint*> spMapPoints;
+        // 这两个容器是searchByProjection定义的容器
+        // 记录窗口内地图点
+        vector<MapPoint*> vpMapPoints;
+        // 记录每个地图点对应的串口内的关键帧
+        vector<KeyFrame*> vpKeyFrames;
+        // vpMapPoints  {mp1, mp2, mp3, mp4}
+        // vpKeyFrames  {kf1, kf1, kf2, kf3}
+        // 遍历窗Wm内的所有关键帧
+        for (KeyFrame* pCovKFi : vpCovKFi)
+        {
+            // 遍历窗口内每个关键帧的所有地图点
+            for (MapPoint* pCovMPij : pCovKFi->GetMapPointMatches())
             {
-                mTcm = solver.iterate(20, bNoMore, vbInliers, nInliers, bConverge);
-                // Verbose::PrintMess("BoW guess: Solver achieve " + to_string(nInliers) + " geometrical inliers among "
-                // + to_string(nBoWInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
-            }
-
-            // 3.3 Guide matching refinement: 利用初始的Scm信息,进行双向重投影,并非线性优化得到更精确的Scm
-            if (bConverge)
-            {
-                // std::cout << "Check BoW: SolverSim3 converged" << std::endl;
-
-                // Verbose::PrintMess("BoW guess: Convergende with " + to_string(nInliers) + " geometrical inliers among
-                // " + to_string(nBoWInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
-                //  Match by reprojection
-                vpCovKFi.clear();
-                // 拿到窗口内匹配最多的帧的最佳10个共视帧和它自己组成的窗口
-                vpCovKFi = pMostBoWMatchesKF->GetBestCovisibilityKeyFrames(nNumCovisibles);
-                vpCovKFi.push_back(pMostBoWMatchesKF);
-                // 这个后面没有用到
-                set<KeyFrame*> spCheckKFs(vpCovKFi.begin(), vpCovKFi.end());
-
-                // std::cout << "There are " << vpCovKFi.size() <<" near KFs" << std::endl;
-
-                // 辅助容器,避免重复添加地图点
-                set<MapPoint*> spMapPoints;
-                // 这两个容器是searchByProjection定义的容器
-                // 记录窗口内地图点
-                vector<MapPoint*> vpMapPoints;
-                // 记录每个地图点对应的串口内的关键帧
-                vector<KeyFrame*> vpKeyFrames;
-                // vpMapPoints  {mp1, mp2, mp3, mp4}
-                // vpKeyFrames  {kf1, kf1, kf2, kf3}
-                // 遍历窗Wm内的所有关键帧
-                for (KeyFrame* pCovKFi : vpCovKFi)
+                // 如果指针为空或者改地图点被标记为bad
+                if (!pCovMPij || pCovMPij->isBad())
+                    continue;
+                // 避免重复添加
+                if (spMapPoints.find(pCovMPij) == spMapPoints.end())
                 {
-                    // 遍历窗口内每个关键帧的所有地图点
-                    for (MapPoint* pCovMPij : pCovKFi->GetMapPointMatches())
-                    {
-                        // 如果指针为空或者改地图点被标记为bad
-                        if (!pCovMPij || pCovMPij->isBad())
-                            continue;
-                        // 避免重复添加
-                        if (spMapPoints.find(pCovMPij) == spMapPoints.end())
-                        {
-                            spMapPoints.insert(pCovMPij);
-                            vpMapPoints.push_back(pCovMPij);
-                            vpKeyFrames.push_back(pCovKFi);
-                        }
-                    }
+                    spMapPoints.insert(pCovMPij);
+                    vpMapPoints.push_back(pCovMPij);
+                    vpKeyFrames.push_back(pCovKFi);
                 }
+            }
+        }
 
-                // std::cout << "There are " << vpKeyFrames.size() <<" KFs which view all the mappoints" << std::endl;
+        // std::cout << "There are " << vpKeyFrames.size() <<" KFs which view all the mappoints" << std::endl;
 
-                // 拿到solver 估计的 Scm初始值, 为后续的非线性优化做准备, 在这里 c 表示当前关键帧, m 表示回环/融合候选帧
-                g2o::Sim3 gScm(solver.GetEstimatedRotation().cast<double>(),
-                               solver.GetEstimatedTranslation().cast<double>(), (double)solver.GetEstimatedScale());
-                // 候选关键帧在其世界坐标系下的坐标
-                g2o::Sim3 gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),
-                               pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
-                // 利用初始的Scm估计确定世界坐标系在当前相机中的位姿
-                g2o::Sim3 gScw = gScm * gSmw;  // Similarity matrix of current from the world position
-                // 准备用来SearchByProjection的位姿信息
+        // 拿到solver 估计的 Scm初始值, 为后续的非线性优化做准备, 在这里 c 表示当前关键帧, m 表示回环/融合候选帧
+        g2o::Sim3 gScm(solver.GetEstimatedRotation().cast<double>(), solver.GetEstimatedTranslation().cast<double>(),
+                       (double)solver.GetEstimatedScale());
+        // 候选关键帧在其世界坐标系下的坐标
+        g2o::Sim3 gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),
+                       pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
+        // 利用初始的Scm估计确定世界坐标系在当前相机中的位姿
+        g2o::Sim3 gScw = gScm * gSmw;  // Similarity matrix of current from the world position
+        // 准备用来SearchByProjection的位姿信息
+        Sophus::Sim3f mScw = Converter::toSophus(gScw);
+
+        // 记录最后searchByProjection的结果
+        vector<MapPoint*> vpMatchedMP;
+        vpMatchedMP.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint*>(NULL));
+        vector<KeyFrame*> vpMatchedKF;
+        vpMatchedKF.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<KeyFrame*>(NULL));
+        // 3.3.1 重新利用之前计算的mScw信息, 通过投影寻找更多的匹配点
+        int numProjMatches =
+            matcher.SearchByProjection(mpCurrentKF, mScw, vpMapPoints, vpKeyFrames, vpMatchedMP, vpMatchedKF, 8, 1.5);
+        // cout <<"BoW: " << numProjMatches << " matches between " << vpMapPoints.size() << " points with coarse
+        // Sim3" << endl;
+
+        // 如果拿到了足够多的匹配点, nProjMatches = 50
+        if (numProjMatches >= nProjMatches)
+        {
+            // Optimize Sim3 transformation with every matches
+            Eigen::Matrix<double, 7, 7> mHessian7x7;
+
+            // 3.3.2 利用搜索到的更多的匹配点用Sim3优化投影误差得到的更好的 gScm
+            // pKFi是候选关键帧
+            int numOptMatches =
+                Optimizer::OptimizeSim3(mpCurrentKF, pKFi, vpMatchedMP, gScm, 10, mbFixScale, mHessian7x7, true);
+
+            // 3.3.3 如果内点足够多,用更小的半径搜索匹配点,并且再次进行优化(p.s.这里与论文不符,并没有再次优化)
+            if (numOptMatches >= nSim3Inliers)
+            {
+                // 前面已经声明了这些变量了,无需再次声明
+                g2o::Sim3     gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),
+                                   pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
+                g2o::Sim3     gScw = gScm * gSmw;  // Similarity matrix of current from the world position
                 Sophus::Sim3f mScw = Converter::toSophus(gScw);
 
-                // 记录最后searchByProjection的结果
                 vector<MapPoint*> vpMatchedMP;
                 vpMatchedMP.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint*>(NULL));
-                vector<KeyFrame*> vpMatchedKF;
-                vpMatchedKF.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<KeyFrame*>(NULL));
-                // 3.3.1 重新利用之前计算的mScw信息, 通过投影寻找更多的匹配点
-                int numProjMatches = matcher.SearchByProjection(mpCurrentKF, mScw, vpMapPoints, vpKeyFrames,
-                                                                vpMatchedMP, vpMatchedKF, 8, 1.5);
-                // cout <<"BoW: " << numProjMatches << " matches between " << vpMapPoints.size() << " points with coarse
-                // Sim3" << endl;
+                // 3.3.4 重新利用之前计算的mScw信息, 通过更小的半径和更严格的距离的投影寻找匹配点
+                // 5 : 半径的增益系数(对比之前下降了)---> 更小的半径, 1.0 , hamming distance 的阀值增益系数--->
+                // 允许更小的距离
+                int numProjOptMatches = matcher.SearchByProjection(mpCurrentKF, mScw, vpMapPoints, vpMatchedMP, 5, 1.0);
 
-                // 如果拿到了足够多的匹配点, nProjMatches = 50
-                if (numProjMatches >= nProjMatches)
+                // 当新的投影得到的内点数量大于nProjOptMatches=80时
+                if (numProjOptMatches >= nProjOptMatches)
                 {
-                    // Optimize Sim3 transformation with every matches
-                    Eigen::Matrix<double, 7, 7> mHessian7x7;
-
-                    bool bFixedScale = mbFixScale;
-                    // 在imu模式下imu未完成第3阶段初始化就不固定scale
-                    if (mpTracker->mSensor == System::IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
-                        bFixedScale = false;
-                    // 3.3.2 利用搜索到的更多的匹配点用Sim3优化投影误差得到的更好的 gScm
-                    // pKFi是候选关键帧
-                    int numOptMatches = Optimizer::OptimizeSim3(mpCurrentKF, pKFi, vpMatchedMP, gScm, 10, mbFixScale,
-                                                                mHessian7x7, true);
-
-                    // 3.3.3 如果内点足够多,用更小的半径搜索匹配点,并且再次进行优化(p.s.这里与论文不符,并没有再次优化)
-                    if (numOptMatches >= nSim3Inliers)
+                    /// 以下为调试信息
+                    int max_x = -1, min_x = 1000000;
+                    int max_y = -1, min_y = 1000000;
+                    for (MapPoint* pMPi : vpMatchedMP)
                     {
-                        // 前面已经声明了这些变量了,无需再次声明
-                        g2o::Sim3     gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),
-                                           pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
-                        g2o::Sim3     gScw = gScm * gSmw;  // Similarity matrix of current from the world position
-                        Sophus::Sim3f mScw = Converter::toSophus(gScw);
-
-                        vector<MapPoint*> vpMatchedMP;
-                        vpMatchedMP.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint*>(NULL));
-                        // 3.3.4 重新利用之前计算的mScw信息, 通过更小的半径和更严格的距离的投影寻找匹配点
-                        // 5 : 半径的增益系数(对比之前下降了)---> 更小的半径, 1.0 , hamming distance 的阀值增益系数--->
-                        // 允许更小的距离
-                        int numProjOptMatches =
-                            matcher.SearchByProjection(mpCurrentKF, mScw, vpMapPoints, vpMatchedMP, 5, 1.0);
-
-                        // 当新的投影得到的内点数量大于nProjOptMatches=80时
-                        if (numProjOptMatches >= nProjOptMatches)
+                        if (!pMPi || pMPi->isBad())
                         {
-                            /// 以下为调试信息
-                            int max_x = -1, min_x = 1000000;
-                            int max_y = -1, min_y = 1000000;
-                            for (MapPoint* pMPi : vpMatchedMP)
-                            {
-                                if (!pMPi || pMPi->isBad())
-                                {
-                                    continue;
-                                }
+                            continue;
+                        }
 
-                                tuple<size_t, size_t> indexes = pMPi->GetIndexInKeyFrame(pKFi);
-                                int                   index   = get<0>(indexes);
-                                if (index >= 0)
-                                {
-                                    int coord_x = pKFi->mvKeysUn[index].pt.x;
-                                    if (coord_x < min_x)
-                                    {
-                                        min_x = coord_x;
-                                    }
-                                    if (coord_x > max_x)
-                                    {
-                                        max_x = coord_x;
-                                    }
-                                    int coord_y = pKFi->mvKeysUn[index].pt.y;
-                                    if (coord_y < min_y)
-                                    {
-                                        min_y = coord_y;
-                                    }
-                                    if (coord_y > max_y)
-                                    {
-                                        max_y = coord_y;
-                                    }
-                                }
+                        tuple<size_t, size_t> indexes = pMPi->GetIndexInKeyFrame(pKFi);
+                        int                   index   = get<0>(indexes);
+                        if (index >= 0)
+                        {
+                            int coord_x = pKFi->mvKeysUn[index].pt.x;
+                            if (coord_x < min_x)
+                            {
+                                min_x = coord_x;
                             }
-                            // 调试完毕
-
-                            // 4. 用当前关键帧的相邻关键来验证前面得到的Tam(共视几何校验)
-                            // 统计验证成功的关键帧数量
-                            int nNumKFs = 0;
-                            // vpMatchedMPs = vpMatchedMP;
-                            // vpMPs = vpMapPoints;
-                            //  Check the Sim3 transformation with the current KeyFrame covisibles
-                            //  4.1 拿到用来验证的关键帧组(后称为验证组): 当前关键帧的共视关键帧，nNumCovisibles = 5;
-                            vector<KeyFrame*> vpCurrentCovKFs =
-                                mpCurrentKF->GetBestCovisibilityKeyFrames(nNumCovisibles);
-
-                            int j = 0;
-                            // 遍历验证组当有三个关键帧验证成功或遍历所有的关键帧后结束循环
-                            while (nNumKFs < 3 && j < vpCurrentCovKFs.size())
+                            if (coord_x > max_x)
                             {
-                                // 拿出验证组中的一个关键帧
-                                KeyFrame* pKFj = vpCurrentCovKFs[j];
-                                // 为 DetectCommonRegionsFromLastKF准备一个初始位姿, 这个用来进行searchByProjection
-                                Sophus::SE3d mTjc = (pKFj->GetPose() * mpCurrentKF->GetPoseInverse()).cast<double>();
-                                g2o::Sim3    gSjc(mTjc.unit_quaternion(), mTjc.translation(), 1.0);
-                                g2o::Sim3    gSjw             = gSjc * gScw;
-                                int          numProjMatches_j = 0;
-                                vector<MapPoint*> vpMatchedMPs_j;
-                                // 4.2 几何校验函数, 这个函数里面其实是个searchByProjection :
-                                // 通过之前计算的位姿转换地图点并通过投影搜索匹配点, 若大于一定数目的任务成功验证一次
-                                bool bValid = DetectCommonRegionsFromLastKF(
-                                    pKFj, pMostBoWMatchesKF, gSjw, numProjMatches_j, vpMapPoints, vpMatchedMPs_j);
-
-                                // 统计valid的帧的数量
-                                if (bValid)
-                                {
-                                    Sophus::SE3f    Tc_w        = mpCurrentKF->GetPose();
-                                    Sophus::SE3f    Tw_cj       = pKFj->GetPoseInverse();
-                                    Sophus::SE3f    Tc_cj       = Tc_w * Tw_cj;
-                                    Eigen::Vector3f vector_dist = Tc_cj.translation();
-                                    nNumKFs++;
-                                }
-                                j++;
+                                max_x = coord_x;
                             }
-
-                            // 这里又是没有用的代码,只是记录一点信息,可能是为了方便打印检查
-                            if (nNumKFs < 3)
+                            int coord_y = pKFi->mvKeysUn[index].pt.y;
+                            if (coord_y < min_y)
                             {
-                                vnStage[index]        = 8;
-                                vnMatchesStage[index] = nNumKFs;
+                                min_y = coord_y;
                             }
-
-                            // 记录第二次searchByProjection得到最多匹配点的关键帧的各种信息,最后作为回环帧/融合帧
-                            if (nBestMatchesReproj < numProjOptMatches)
+                            if (coord_y > max_y)
                             {
-                                nBestMatchesReproj   = numProjOptMatches;  // 投影匹配的数量
-                                nBestNumCoindicendes = nNumKFs;            // 成功验证的帧数
-                                pBestMatchedKF = pMostBoWMatchesKF;  // 记录候选帧窗口内与当前关键帧相似度最高的帧
-                                g2oBestScw =
-                                    gScw;  // 记录最优的位姿(这个位姿是由Tam推到出来的 : Taw = Tam * Tmw,这里a表示c)
-                                vpBestMapPoints = vpMapPoints;         //  记录所有的地图点
-                                vpBestMatchedMapPoints = vpMatchedMP;  // 记录所有的地图点中被成功匹配的点
+                                max_y = coord_y;
                             }
                         }
                     }
+                    // 调试完毕
+
+                    // 4. 用当前关键帧的相邻关键来验证前面得到的Tam(共视几何校验)
+                    // 统计验证成功的关键帧数量
+                    int nNumKFs = 0;
+                    // vpMatchedMPs = vpMatchedMP;
+                    // vpMPs = vpMapPoints;
+                    //  Check the Sim3 transformation with the current KeyFrame covisibles
+                    //  4.1 拿到用来验证的关键帧组(后称为验证组): 当前关键帧的共视关键帧，nNumCovisibles = 5;
+                    vector<KeyFrame*> vpCurrentCovKFs = mpCurrentKF->GetBestCovisibilityKeyFrames(nNumCovisibles);
+
+                    int j = 0;
+                    // 遍历验证组当有三个关键帧验证成功或遍历所有的关键帧后结束循环
+                    while (nNumKFs < 3 && j < vpCurrentCovKFs.size())
+                    {
+                        // 拿出验证组中的一个关键帧
+                        KeyFrame* pKFj = vpCurrentCovKFs[j];
+                        // 为 DetectCommonRegionsFromLastKF准备一个初始位姿, 这个用来进行searchByProjection
+                        Sophus::SE3d      mTjc = (pKFj->GetPose() * mpCurrentKF->GetPoseInverse()).cast<double>();
+                        g2o::Sim3         gSjc(mTjc.unit_quaternion(), mTjc.translation(), 1.0);
+                        g2o::Sim3         gSjw             = gSjc * gScw;
+                        int               numProjMatches_j = 0;
+                        vector<MapPoint*> vpMatchedMPs_j;
+                        // 4.2 几何校验函数, 这个函数里面其实是个searchByProjection :
+                        // 通过之前计算的位姿转换地图点并通过投影搜索匹配点, 若大于一定数目的任务成功验证一次
+                        bool bValid = DetectCommonRegionsFromLastKF(pKFj, pMostBoWMatchesKF, gSjw, numProjMatches_j,
+                                                                    vpMapPoints, vpMatchedMPs_j);
+
+                        // 统计valid的帧的数量
+                        if (bValid)
+                        {
+                            Sophus::SE3f    Tc_w        = mpCurrentKF->GetPose();
+                            Sophus::SE3f    Tw_cj       = pKFj->GetPoseInverse();
+                            Sophus::SE3f    Tc_cj       = Tc_w * Tw_cj;
+                            Eigen::Vector3f vector_dist = Tc_cj.translation();
+                            nNumKFs++;
+                        }
+                        j++;
+                    }
+
+                    // 这里又是没有用的代码,只是记录一点信息,可能是为了方便打印检查
+                    if (nNumKFs < 3)
+                    {
+                        vnStage[index]        = 8;
+                        vnMatchesStage[index] = nNumKFs;
+                    }
+
+                    // 记录第二次searchByProjection得到最多匹配点的关键帧的各种信息,最后作为回环帧/融合帧
+                    if (nBestMatchesReproj < numProjOptMatches)
+                    {
+                        nBestMatchesReproj   = numProjOptMatches;  // 投影匹配的数量
+                        nBestNumCoindicendes = nNumKFs;            // 成功验证的帧数
+                        pBestMatchedKF = pMostBoWMatchesKF;  // 记录候选帧窗口内与当前关键帧相似度最高的帧
+                        g2oBestScw = gScw;  // 记录最优的位姿(这个位姿是由Tam推到出来的 : Taw = Tam * Tmw,这里a表示c)
+                        vpBestMapPoints        = vpMapPoints;  //  记录所有的地图点
+                        vpBestMatchedMapPoints = vpMatchedMP;  // 记录所有的地图点中被成功匹配的点
+                    }
                 }
             }
-            /*else
-            {
-                Verbose::PrintMess("BoW candidate: it don't match with the current one", Verbose::VERBOSITY_DEBUG);
-            }*/
         }
         index++;
     }
@@ -1227,13 +1223,11 @@ bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*>& vpBowCand, 
     {
         // 这里是一些无用的变量, 左值只用来打印检查
         int maxStage = -1;
-        int maxMatched;
         for (int i = 0; i < vnStage.size(); ++i)
         {
             if (vnStage[i] > maxStage)
             {
-                maxStage   = vnStage[i];
-                maxMatched = vnMatchesStage[i];
+                maxStage = vnStage[i];
             }
         }
     }
