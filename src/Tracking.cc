@@ -5056,8 +5056,7 @@ void Tracking::InformOnlyTracking(const bool& flag)
  */
 void Tracking::UpdateFrameIMU(const float s, const IMU::Bias& b, KeyFrame* pCurrentKeyFrame)
 {
-    Map*         pMap  = pCurrentKeyFrame->GetMap();
-    unsigned int index = mnFirstFrameId;
+    Map* pMap = pCurrentKeyFrame->GetMap();
 
     // 每一帧的参考关键帧
     list<ORB_SLAM3::KeyFrame*>::iterator lRit = mlpReferences.begin();

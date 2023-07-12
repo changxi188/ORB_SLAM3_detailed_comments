@@ -6192,26 +6192,36 @@ void Optimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool* pbS
         {
             // Using mnBALocalForKF we avoid redundance here, one MP can not be added several times to lLocalMapPoints
             MapPoint* pMP = *vit;
-            if (pMP)
-                if (!pMP->isBad())
-                    // 用这个变量记录是否重复添加
-                    if (pMP->mnBALocalForKF != pCurrKF->mnId)
-                    {
-                        mLocalObs[pMP] = 1;
-                        lLocalMapPoints.push_back(pMP);
-                        pMP->mnBALocalForKF = pCurrKF->mnId;  // 防止重复添加
-                    }
-                    else
-                    {
-                        mLocalObs[pMP]++;
-                    }
+            if (!pMP)
+            {
+                continue;
+            }
+
+            if (pMP->isBad())
+            {
+                continue;
+            }
+
+            // 用这个变量记录是否重复添加
+            if (pMP->mnBALocalForKF != pCurrKF->mnId)
+            {
+                mLocalObs[pMP] = 1;
+                lLocalMapPoints.push_back(pMP);
+                pMP->mnBALocalForKF = pCurrKF->mnId;  // 防止重复添加
+            }
+            else
+            {
+                mLocalObs[pMP]++;
+            }
         }
     }
 
     std::vector<std::pair<MapPoint*, int>> pairs;
     pairs.reserve(mLocalObs.size());
     for (auto itr = mLocalObs.begin(); itr != mLocalObs.end(); ++itr)
+    {
         pairs.push_back(*itr);
+    }
     sort(pairs.begin(), pairs.end(), sortByVal);
 
     // 4. 把pCurrKF的共视帧加进来 只优化位姿，不优化速度与偏置
@@ -6498,63 +6508,67 @@ void Optimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool* pbS
             }
 
             if (optimizer.vertex(id) == NULL || optimizer.vertex(pKFi->mnId) == NULL)
-                continue;
-
-            if (!pKFi->isBad())
             {
-                // 3D点的观测
-                const cv::KeyPoint& kpUn = pKFi->mvKeysUn[get<0>(mit->second)];
-                // 如果是单目观测
-                if (pKFi->mvuRight[get<0>(mit->second)] < 0)  // Monocular observation
-                {
-                    // 投影
-                    Eigen::Matrix<double, 2, 1> obs;
-                    obs << kpUn.pt.x, kpUn.pt.y;
+                continue;
+            }
 
-                    EdgeMono* e = new EdgeMono();
-                    // 设置边的顶点
-                    // 3D点
-                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
-                    // 关键帧位姿
-                    e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
-                    e->setMeasurement(obs);
-                    const float& invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
-                    // 设置信息矩阵
-                    e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+            if (pKFi->isBad())
+            {
+                continue;
+            }
 
-                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    e->setRobustKernel(rk);
-                    rk->setDelta(thHuberMono);
-                    // 添加边
-                    optimizer.addEdge(e);
-                    vpEdgesMono.push_back(e);
-                    vpEdgeKFMono.push_back(pKFi);
-                    vpMapPointEdgeMono.push_back(pMP);
-                }
-                // 双目
-                else  // stereo observation
-                {
-                    const float                 kp_ur = pKFi->mvuRight[get<0>(mit->second)];
-                    Eigen::Matrix<double, 3, 1> obs;
-                    obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+            // 3D点的观测
+            const cv::KeyPoint& kpUn = pKFi->mvKeysUn[get<0>(mit->second)];
+            // 如果是单目观测
+            if (pKFi->mvuRight[get<0>(mit->second)] < 0)  // Monocular observation
+            {
+                // 投影
+                Eigen::Matrix<double, 2, 1> obs;
+                obs << kpUn.pt.x, kpUn.pt.y;
 
-                    EdgeStereo* e = new EdgeStereo();
+                EdgeMono* e = new EdgeMono();
+                // 设置边的顶点
+                // 3D点
+                e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
+                // 关键帧位姿
+                e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
+                e->setMeasurement(obs);
+                const float& invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
+                // 设置信息矩阵
+                e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
 
-                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
-                    e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
-                    e->setMeasurement(obs);
-                    const float& invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
-                    e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
+                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                e->setRobustKernel(rk);
+                rk->setDelta(thHuberMono);
+                // 添加边
+                optimizer.addEdge(e);
+                vpEdgesMono.push_back(e);
+                vpEdgeKFMono.push_back(pKFi);
+                vpMapPointEdgeMono.push_back(pMP);
+            }
+            // 双目
+            else  // stereo observation
+            {
+                const float                 kp_ur = pKFi->mvuRight[get<0>(mit->second)];
+                Eigen::Matrix<double, 3, 1> obs;
+                obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
 
-                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    e->setRobustKernel(rk);
-                    rk->setDelta(thHuberStereo);
+                EdgeStereo* e = new EdgeStereo();
 
-                    optimizer.addEdge(e);
-                    vpEdgesStereo.push_back(e);
-                    vpEdgeKFStereo.push_back(pKFi);
-                    vpMapPointEdgeStereo.push_back(pMP);
-                }
+                e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
+                e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
+                e->setMeasurement(obs);
+                const float& invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
+                e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
+
+                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+                e->setRobustKernel(rk);
+                rk->setDelta(thHuberStereo);
+
+                optimizer.addEdge(e);
+                vpEdgesStereo.push_back(e);
+                vpEdgeKFStereo.push_back(pKFi);
+                vpMapPointEdgeStereo.push_back(pMP);
             }
         }
     }
@@ -6566,7 +6580,7 @@ void Optimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool* pbS
     optimizer.initializeOptimization();
     optimizer.optimize(8);
 
-    // 更具优化结果挑选删除外点
+    // 根据优化结果挑选删除外点
     vector<pair<KeyFrame*, MapPoint*>> vToErase;
     vToErase.reserve(vpEdgesMono.size() + vpEdgesStereo.size());
 
@@ -6655,6 +6669,7 @@ void Optimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool* pbS
             pKFi->SetNewBias(IMU::Bias(b[3], b[4], b[5], b[0], b[1], b[2]));
         }
     }
+
     // 遍历所有的共视帧
     for (int i = 0; i < Ncov; i++)
     {

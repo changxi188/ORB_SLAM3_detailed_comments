@@ -17,6 +17,7 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <math.h>
 #include "LoopClosing.h"
 
 #include "Converter.h"
@@ -268,8 +269,7 @@ void LoopClosing::Run()
             mg2oMergeScw = mg2oMergeSlw;
 
             // mpTracker->SetStepByStep(true);
-
-            Verbose::PrintMess("*Merge detected", Verbose::VERBOSITY_QUIET);
+            LOG(INFO) << "Run --- *Merge detected";
 
 #ifdef REGISTER_TIMES
             std::chrono::steady_clock::time_point time_StartMerge = std::chrono::steady_clock::now();
@@ -281,9 +281,13 @@ void LoopClosing::Run()
             // 如果是纯视觉模式,则开启 Visual-Welding Map Merging
             if (mpTracker->mSensor == System::IMU_MONOCULAR || mpTracker->mSensor == System::IMU_STEREO ||
                 mpTracker->mSensor == System::IMU_RGBD)
+            {
                 MergeLocal2();
+            }
             else
+            {
                 MergeLocal();
+            }
 
 #ifdef REGISTER_TIMES
             std::chrono::steady_clock::time_point time_EndMerge = std::chrono::steady_clock::now();
@@ -293,8 +297,8 @@ void LoopClosing::Run()
                     .count();
             vdMergeTotal_ms.push_back(timeMergeTotal);
 #endif
+            LOG(INFO) << "Run --- Merge finished!";
 
-            Verbose::PrintMess("Merge finished!", Verbose::VERBOSITY_QUIET);
             // 记录时间戳
             vdPR_CurrentTime.push_back(mpCurrentKF->mTimeStamp);
             vdPR_MatchedTime.push_back(mpMergeMatchedKF->mTimeStamp);
@@ -1248,7 +1252,7 @@ bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*>& vpBowCand, 
             nBestNumCoindicendes = nNumKFs;            // 成功验证的帧数
             pBestMatchedKF = pMostBoWMatchesKF;  // 记录候选帧窗口内与当前关键帧相似度最高的帧
             g2oBestScw = new_gScw;  // 记录最优的位姿(这个位姿是由Tam推到出来的 : Taw = Tam * Tmw,这里a表示c)
-            vpBestMapPoints        = vpMapPoints;      //  记录local window 中所有的地图点
+            vpBestMapPoints = vpMapPoints;             //  记录local window 中所有的地图点
             vpBestMatchedMapPoints = new_vpMatchedMP;  // 记录local window 中所有的地图点中被成功匹配的点
         }
         index++;
@@ -2479,7 +2483,7 @@ void LoopClosing::MergeLocal()
  */
 void LoopClosing::MergeLocal2()
 {
-    // cout << "Merge detected!!!!" << endl;
+    LOG(INFO) << "MergeLocal2 --- Merge detected!!!!";
     //  没用上
     int numTemporalKFs = 11;  // TODO (set by parameter): Temporal KFs in the local window if the map is inertial.
 
@@ -2501,7 +2505,8 @@ void LoopClosing::MergeLocal2()
     // 记录要不要重新进行全局ba
     bool bRelaunchBA = false;
 
-    // cout << "Check Full Bundle Adjustment" << endl;
+    LOG(INFO) << "MergeLocal2 --- Check Full Bundle Adjustment";
+
     //  If a Global Bundle Adjustment is running, abort it
     //  Step 1 如果正在进行全局BA，停掉它
     if (isRunningGBA())
@@ -2519,7 +2524,8 @@ void LoopClosing::MergeLocal2()
         bRelaunchBA = true;
     }
 
-    // cout << "Request Stop Local Mapping" << endl;
+    LOG(INFO) << "MergeLocal2 --- Request Stop Local Mapping";
+
     //  Step 2 暂停局部建图线程
     mpLocalMapper->RequestStop();
     // Wait until Local Mapping has effectively stopped
@@ -2528,7 +2534,7 @@ void LoopClosing::MergeLocal2()
     {
         usleep(1000);
     }
-    // cout << "Local Map stopped" << endl;
+    LOG(INFO) << "MergeLocal2 --- Local Map stopped" << endl;
 
     // 当前关键帧地图的指针
     Map* pCurrentMap = mpCurrentKF->GetMap();
@@ -2545,19 +2551,23 @@ void LoopClosing::MergeLocal2()
         // 锁住altas更新地图
         unique_lock<mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
 
-        // cout << "KFs before empty: " << mpAtlas->GetCurrentMap()->KeyFramesInMap() << endl;
+        LOG(INFO) << "MergeLocal2 --- KFs before empty: " << mpAtlas->GetCurrentMap()->KeyFramesInMap();
         //  队列里还没来得及处理的关键帧清空
         mpLocalMapper->EmptyQueue();
-        // cout << "KFs after empty: " << mpAtlas->GetCurrentMap()->KeyFramesInMap() << endl;
+        LOG(INFO) << "MergeLocal2 --- KFs after empty: " << mpAtlas->GetCurrentMap()->KeyFramesInMap() << endl;
 
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
-        // cout << "updating active map to merge reference" << endl;
-        // cout << "curr merge KF id: " << mpCurrentKF->mnId << endl;
-        // cout << "curr tracking KF id: " << mpTracker->GetLastKeyFrame()->mnId << endl;
+
+        LOG(INFO) << "MergeLocal2 --- updating active map to merge reference";
+        LOG(INFO) << "MergeLocal2 --- curr merge KF id: " << mpCurrentKF->mnId;
+        LOG(INFO) << "MergeLocal2 --- curr tracking KF id: " << mpTracker->GetLastKeyFrame()->mnId;
         //  是否将尺度更新到速度
         bool bScaleVel = false;
         if (s_on != 1)  // ?判断浮点数和1严格相等是不是不合适？
+        {
             bScaleVel = true;
+        }
+
         // 利用mSold_new位姿把整个当前地图中的关键帧和地图点变换到融合帧所在地图的坐标系下
         mpAtlas->GetCurrentMap()->ApplyScaledRotation(T_on, s_on, bScaleVel);
         // 尺度更新到普通帧位姿
@@ -2592,11 +2602,12 @@ void LoopClosing::MergeLocal2()
         pCurrentMap->SetImuInitialized();
     }
 
-    // cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " <<
-    // pCurrentMap->GetInitKFid() << endl;
+    LOG(INFO) << "MergeLocal2 --- MergeMap init ID: " << pMergeMap->GetInitKFid()
+              << "       CurrMap init ID: " << pCurrentMap->GetInitKFid();
+
+    LOG(INFO) << "MergeLocal2 --- updating current map";
 
     // Load KFs and MPs from merge map
-    // cout << "updating current map" << endl;
     // Step 5 地图以旧换新。把融合帧所在地图里的关键帧和地图点从原地图里删掉，变更为当前关键帧所在地图。
     {
         // Get Merge Map Mutex (This section stops tracking!!)
@@ -2650,24 +2661,29 @@ void LoopClosing::MergeLocal2()
         }
     }
 
-    // cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " <<
-    // pCurrentMap->GetInitKFid() << endl;
+    LOG(INFO) << "MergeLocal2 --- MergeMap init ID: " << pMergeMap->GetInitKFid()
+              << ", CurrMap init ID: " << pCurrentMap->GetInitKFid();
 
-    // cout << "end updating current map" << endl;
+    LOG(INFO) << "MergeLocal2 --- end updating current map";
 
     // Critical zone
     // bool good = pCurrentMap->CheckEssentialGraph();
     /*if(!good)
         cout << "BAD ESSENTIAL GRAPH!!" << endl;*/
 
-    // cout << "Update essential graph" << endl;
+    LOG(INFO) << "MergeLocal2 --- Update essential graph" << endl;
     //  mpCurrentKF->UpdateConnections(); // to put at false mbFirstConnection
     //  Step 6 融合新旧地图的生成树
     pMergeMap->GetOriginKF()->SetFirstConnection(false);
-    pNewChild  = mpMergeMatchedKF->GetParent();  // Old parent, it will be the new child of this KF
-    pNewParent = mpMergeMatchedKF;  // Old child, now it will be the parent of its own parent(we need eliminate this KF
-                                    // from children list in its old parent)
+
+    // Old parent, it will be the new child of this KF
+    pNewChild = mpMergeMatchedKF->GetParent();
+
+    // Old child, now it will be the parent of its own parent(we need eliminate this KF  from children list in its old
+    // parent)
+    pNewParent = mpMergeMatchedKF;
     mpMergeMatchedKF->ChangeParent(mpCurrentKF);
+
     while (pNewChild)
     {
         pNewChild->EraseChild(pNewParent);  // We remove the relation between the old parent and the new for avoid loop
@@ -2677,10 +2693,10 @@ void LoopClosing::MergeLocal2()
         pNewChild  = pOldParent;
     }
 
-    // cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " <<
-    // pCurrentMap->GetInitKFid() << endl;
+    LOG(INFO) << "MergeLocal2 ---- MergeMap init ID: " << pMergeMap->GetInitKFid()
+              << ", CurrMap init ID: " << pCurrentMap->GetInitKFid();
 
-    // cout << "end update essential graph" << endl;
+    LOG(INFO) << "MergeLocal2 ---- end update essential graph" << endl;
 
     /*good = pCurrentMap->CheckEssentialGraph();
     if(!good)
@@ -2697,19 +2713,19 @@ void LoopClosing::MergeLocal2()
     vector<KeyFrame*> aux = mpMergeMatchedKF->GetVectorCovisibleKeyFrames();
     mvpMergeConnectedKFs.insert(mvpMergeConnectedKFs.end(), aux.begin(), aux.end());
     if (mvpMergeConnectedKFs.size() > 6)
+    {
         mvpMergeConnectedKFs.erase(mvpMergeConnectedKFs.begin() + 6, mvpMergeConnectedKFs.end());
-    /*mvpMergeConnectedKFs = mpMergeMatchedKF->GetVectorCovisibleKeyFrames();
-    mvpMergeConnectedKFs.push_back(mpMergeMatchedKF);*/
+    }
 
     // 拿出当前关键帧的局部窗口, 确保最后是(1+5), 1: 融合帧自己 2: 5个共视关键帧
     mpCurrentKF->UpdateConnections();
     vpCurrentConnectedKFs.push_back(mpCurrentKF);
-    /*vpCurrentConnectedKFs = mpCurrentKF->GetVectorCovisibleKeyFrames();
-    vpCurrentConnectedKFs.push_back(mpCurrentKF);*/
     aux = mpCurrentKF->GetVectorCovisibleKeyFrames();
     vpCurrentConnectedKFs.insert(vpCurrentConnectedKFs.end(), aux.begin(), aux.end());
     if (vpCurrentConnectedKFs.size() > 6)
+    {
         vpCurrentConnectedKFs.erase(vpCurrentConnectedKFs.begin() + 6, vpCurrentConnectedKFs.end());
+    }
 
     // 所有融合帧局部窗口的地图点
     set<MapPoint*> spMapPointMerge;
@@ -2718,37 +2734,40 @@ void LoopClosing::MergeLocal2()
         set<MapPoint*> vpMPs = pKFi->GetMapPoints();
         spMapPointMerge.insert(vpMPs.begin(), vpMPs.end());
         if (spMapPointMerge.size() > 1000)
+        {
             break;
+        }
     }
 
-    /*cout << "vpCurrentConnectedKFs.size() " << vpCurrentConnectedKFs.size() << endl;
-    cout << "mvpMergeConnectedKFs.size() " << mvpMergeConnectedKFs.size() << endl;
-    cout << "spMapPointMerge.size() " << spMapPointMerge.size() << endl;*/
+    LOG(INFO) << "MergeLocal2 ----  vpCurrentConnectedKFs.size() " << vpCurrentConnectedKFs.size();
+    LOG(INFO) << "MergeLocal2 ---- mvpMergeConnectedKFs.size() " << mvpMergeConnectedKFs.size();
+    LOG(INFO) << "MergeLocal2 ---- spMapPointMerge.size() " << spMapPointMerge.size();
 
     vpCheckFuseMapPoint.reserve(spMapPointMerge.size());
     std::copy(spMapPointMerge.begin(), spMapPointMerge.end(), std::back_inserter(vpCheckFuseMapPoint));
-    // cout << "Finished to update relationship between KFs" << endl;
+    LOG(INFO) << "MergeLocal2 ---- Finished to update relationship between KFs";
 
-    // cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " <<
-    // pCurrentMap->GetInitKFid() << endl;
+    LOG(INFO) << "MergeLocal2 ---- MergeMap init ID: " << pMergeMap->GetInitKFid()
+              << ", CurrMap init ID: " << pCurrentMap->GetInitKFid();
 
     /*good = pCurrentMap->CheckEssentialGraph();
     if(!good)
         cout << "BAD ESSENTIAL GRAPH 2!!" << endl;*/
 
-    // cout << "start SearchAndFuse" << endl;
+    LOG(INFO) << "MergeLocal2 ---- start SearchAndFuse" << endl;
     //  Step 7 把融合关键帧的共视窗口里的地图点投到当前关键帧的共视窗口里，把重复的点融合掉（以旧换新）
     SearchAndFuse(vpCurrentConnectedKFs, vpCheckFuseMapPoint);
-    // cout << "end SearchAndFuse" << endl;
+    LOG(INFO) << "MergeLocal2 ---- end SearchAndFuse" << endl;
 
-    // cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " <<
-    // pCurrentMap->GetInitKFid() << endl;
+    LOG(INFO) << "MergeLocal2 ---- MergeMap init ID: " << pMergeMap->GetInitKFid()
+              << ", CurrMap init ID: " << pCurrentMap->GetInitKFid() << endl;
 
     /*good = pCurrentMap->CheckEssentialGraph();
     if(!good)
         cout << "BAD ESSENTIAL GRAPH 3!!" << endl;
+    */
 
-    cout << "Init to update connections" << endl;*/
+    LOG(INFO) << "MergeLocal2 ---- Init to update connections";
 
     // 更新当前关键帧共视窗口内所有关键帧的连接
     for (KeyFrame* pKFi : vpCurrentConnectedKFs)
@@ -2767,10 +2786,10 @@ void LoopClosing::MergeLocal2()
 
         pKFi->UpdateConnections();
     }
-    // cout << "end update connections" << endl;
+    LOG(INFO) << "MergeLocal2 ---- end update connections" << endl;
 
-    // cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " <<
-    // pCurrentMap->GetInitKFid() << endl;
+    LOG(INFO) << "MergeLocal2 ---- MergeMap init ID: " << pMergeMap->GetInitKFid()
+              << ", CurrMap init ID: " << pCurrentMap->GetInitKFid() << endl;
 
     /*good = pCurrentMap->CheckEssentialGraph();
     if(!good)
@@ -2790,10 +2809,10 @@ void LoopClosing::MergeLocal2()
     // Perform BA
     bool      bStopFlag = false;
     KeyFrame* pCurrKF   = mpTracker->GetLastKeyFrame();
-    // cout << "start MergeInertialBA" << endl;
+    LOG(INFO) << "MergeLocal2 ---- start MergeInertialBA";
     //  Step 8 针对缝合区域的窗口内进行进行welding BA
     Optimizer::MergeInertialBA(pCurrKF, mpMergeMatchedKF, &bStopFlag, pCurrentMap, CorrectedSim3);
-    // cout << "end MergeInertialBA" << endl;
+    LOG(INFO) << "MergeLocal2 ---- end MergeInertialBA";
 
     /*good = pCurrentMap->CheckEssentialGraph();
     if(!good)

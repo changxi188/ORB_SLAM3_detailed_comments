@@ -1300,11 +1300,15 @@ void LocalMapping::Release()
     unique_lock<mutex> lock(mMutexStop);
     unique_lock<mutex> lock2(mMutexFinish);
     if (mbFinished)
+    {
         return;
+    }
     mbStopped       = false;
     mbStopRequested = false;
     for (list<KeyFrame*>::iterator lit = mlNewKeyFrames.begin(), lend = mlNewKeyFrames.end(); lit != lend; lit++)
+    {
         delete *lit;
+    }
     mlNewKeyFrames.clear();
 
     LOG(WARNING) << "Release --- Local Mapping RELEASE" << endl;
