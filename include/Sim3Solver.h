@@ -27,7 +27,6 @@
 
 namespace ORB_SLAM3
 {
-
 class Sim3Solver
 {
 public:

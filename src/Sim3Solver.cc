@@ -30,7 +30,6 @@
 
 namespace ORB_SLAM3
 {
-
 Sim3Solver::Sim3Solver(KeyFrame* pKF1, KeyFrame* pKF2, const vector<MapPoint*>& vpMatched12, const bool bFixScale,
                        vector<KeyFrame*> vpKeyFrameMatchedMP)
   : mnIterations(0), mnBestInliers(0), mbFixScale(bFixScale), pCamera1(pKF1->mpCamera), pCamera2(pKF2->mpCamera)
