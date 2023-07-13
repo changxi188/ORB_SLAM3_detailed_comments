@@ -29,7 +29,6 @@
 
 namespace ORB_SLAM3
 {
-
 /**
  * @brief 局部地图线程构造函数
  * @param pSys 系统类指针
@@ -252,7 +251,7 @@ void LocalMapping::Run()
         int  num_MPs_BA     = 0;
         int  num_edges_BA   = 0;
 
-        // 已经处理完队列中的最后的一个关键帧，并且闭环检测没有请求停止LocalMapping
+        // keyframe buffer中仍然还有keyframe，先继续处理
         if (CheckNewKeyFrames() || stopRequested())
         {
 #ifdef REGISTER_TIMES
@@ -290,6 +289,7 @@ void LocalMapping::Run()
             continue;
         }
 
+        // 已经处理完队列中的最后的一个关键帧，并且闭环检测没有请求停止LocalMapping
         LOG(INFO) << "Run --- last keyframe in buffer has been processed, so we can do some additional operations";
         // 当前地图中关键帧数目大于2个
         if (mpAtlas->KeyFramesInMap() > 2)
@@ -802,10 +802,11 @@ void LocalMapping::CreateNewMapPoints()
 
             // 5.1
             // 当前匹配在当前关键帧中的特征点
-            const cv::KeyPoint& kp1 =
-                (mpCurrentKeyFrame->NLeft == -1)  ? mpCurrentKeyFrame->mvKeysUn[idx1] :
-                (idx1 < mpCurrentKeyFrame->NLeft) ? mpCurrentKeyFrame->mvKeys[idx1] :
-                                                    mpCurrentKeyFrame->mvKeysRight[idx1 - mpCurrentKeyFrame->NLeft];
+            const cv::KeyPoint& kp1 = (mpCurrentKeyFrame->NLeft == -1) ?
+                                          mpCurrentKeyFrame->mvKeysUn[idx1] :
+                                          (idx1 < mpCurrentKeyFrame->NLeft) ?
+                                          mpCurrentKeyFrame->mvKeys[idx1] :
+                                          mpCurrentKeyFrame->mvKeysRight[idx1 - mpCurrentKeyFrame->NLeft];
             // mvuRight中存放着极限校准后双目特征点在右目对应的像素横坐标，如果不是基线校准的双目或者没有找到匹配点，其值将为-1（或者rgbd）
             const float kp1_ur   = mpCurrentKeyFrame->mvuRight[idx1];
             bool        bStereo1 = (!mpCurrentKeyFrame->mpCamera2 && kp1_ur >= 0);
@@ -814,9 +815,9 @@ void LocalMapping::CreateNewMapPoints()
 
             // 5.2
             // 当前匹配在邻接关键帧中的特征点
-            const cv::KeyPoint& kp2 = (pKF2->NLeft == -1)  ? pKF2->mvKeysUn[idx2] :
-                                      (idx2 < pKF2->NLeft) ? pKF2->mvKeys[idx2] :
-                                                             pKF2->mvKeysRight[idx2 - pKF2->NLeft];
+            const cv::KeyPoint& kp2 =
+                (pKF2->NLeft == -1) ? pKF2->mvKeysUn[idx2] :
+                                      (idx2 < pKF2->NLeft) ? pKF2->mvKeys[idx2] : pKF2->mvKeysRight[idx2 - pKF2->NLeft];
             // mvuRight中存放着双目的深度值，如果不是双目，其值将为-1
             // mvuRight中存放着极限校准后双目特征点在右目对应的像素横坐标，如果不是基线校准的双目或者没有找到匹配点，其值将为-1（或者rgbd）
             const float kp2_ur   = pKF2->mvuRight[idx2];
@@ -1456,9 +1457,9 @@ void LocalMapping::KeyFrameCulling()
                 continue;
             }
 
-            const int&                            scaleLevel   = (pKF->NLeft == -1) ? pKF->mvKeysUn[i].octave :
-                                                                 (i < pKF->NLeft)   ? pKF->mvKeys[i].octave :
-                                                                                      pKF->mvKeysRight[i].octave;
+            const int& scaleLevel = (pKF->NLeft == -1) ?
+                                        pKF->mvKeysUn[i].octave :
+                                        (i < pKF->NLeft) ? pKF->mvKeys[i].octave : pKF->mvKeysRight[i].octave;
             const map<KeyFrame*, tuple<int, int>> observations = pMP->GetObservations();
             int                                   nObs         = 0;
             // 遍历观测到该地图点的关键帧

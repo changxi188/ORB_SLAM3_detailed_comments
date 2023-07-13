@@ -48,6 +48,12 @@ LoopClosing::LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pV
   , mpKeyFrameDB(pDB)
   , mpORBVocabulary(pVoc)
   , mpMatchedKF(NULL)
+  , mbLoopDetected(false)
+  , mnLoopNumCoincidences(0)
+  , mnLoopNumNotFound(0)
+  , mbMergeDetected(false)
+  , mnMergeNumCoincidences(0)
+  , mnMergeNumNotFound(0)
   , mLastLoopKFid(0)
   , mbRunningGBA(false)
   , mbFinishedGBA(true)
@@ -55,12 +61,6 @@ LoopClosing::LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pV
   , mpThreadGBA(NULL)
   , mbFixScale(bFixScale)
   , mnFullBAIdx(0)
-  , mnLoopNumCoincidences(0)
-  , mnMergeNumCoincidences(0)
-  , mbLoopDetected(false)
-  , mbMergeDetected(false)
-  , mnLoopNumNotFound(0)
-  , mnMergeNumNotFound(0)
   , mbActiveLC(bActiveLC)
 {
     // 连续性阈值
@@ -1252,7 +1252,7 @@ bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*>& vpBowCand, 
             nBestNumCoindicendes = nNumKFs;            // 成功验证的帧数
             pBestMatchedKF = pMostBoWMatchesKF;  // 记录候选帧窗口内与当前关键帧相似度最高的帧
             g2oBestScw = new_gScw;  // 记录最优的位姿(这个位姿是由Tam推到出来的 : Taw = Tam * Tmw,这里a表示c)
-            vpBestMapPoints = vpMapPoints;             //  记录local window 中所有的地图点
+            vpBestMapPoints        = vpMapPoints;      //  记录local window 中所有的地图点
             vpBestMatchedMapPoints = new_vpMatchedMP;  // 记录local window 中所有的地图点中被成功匹配的点
         }
         index++;
